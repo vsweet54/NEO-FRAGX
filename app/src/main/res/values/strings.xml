@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">NEO FRAGX</string>
+    <string name="app_full_title">NEO FRAGX — Advanced Gaming Tuner</string>
+    <string name="app_tagline">Gaming Performance Engine</string>
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_rendering">Rendering</string>
+    <string name="nav_games">Games</string>
+    <string name="nav_tuning">Tuning</string>
+    <string name="nav_tools">Tools</string>
+</resources>

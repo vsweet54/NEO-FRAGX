@@ -1,0 +1,6 @@
+{
+  "name": "NEO FRAGX — Advanced Gaming Tuner",
+  "description": "Engine gaming tuner canggih untuk Android: Rendering Engine (OpenGL/Vulkan/ANGLE/Skia), Frame & FPS Control, CPU/GPU Tuner, Game Manager, Root/Shizuku Integration, dan Diagnostic Tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

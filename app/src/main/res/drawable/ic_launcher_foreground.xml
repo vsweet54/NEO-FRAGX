@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer glowing cyber circle ring with notches -->
+    <path
+        android:pathData="M31,31 A32.5,32.5 0 0,1 77,31 M85,46 A32.5,32.5 0 0,1 81,69 M71,79 A32.5,32.5 0 0,1 37,79 M27,69 A32.5,32.5 0 0,1 23,46"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="20"
+                android:startY="20"
+                android:endX="88"
+                android:endY="88"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#00F0FF" />
+                <item android:offset="0.5" android:color="#0080FF" />
+                <item android:offset="1.0" android:color="#00E5FF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Outer sharp accent notches -->
+    <path
+        android:pathData="M23,37 L29,32 M85,37 L79,32 M85,71 L79,76 M23,71 L29,76"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeColor="#00F0FF" />
+
+    <!-- Left Wing (N stroke) -->
+    <path
+        android:pathData="M32,71 L42,32 L51,32 L39,71 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="32"
+                android:startY="32"
+                android:endX="48"
+                android:endY="71"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#00E5FF" />
+                <item android:offset="1.0" android:color="#0052D4" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Center Sharp Angular Blade (Diagonal of N / F connector) -->
+    <path
+        android:pathData="M42,32 L68,75 L59,75 L35,46 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="35"
+                android:startY="32"
+                android:endX="68"
+                android:endY="75"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#38E8FF" />
+                <item android:offset="0.4" android:color="#00B0FF" />
+                <item android:offset="1.0" android:color="#1976D2" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Right Sharp Wing & F Bars -->
+    <path
+        android:pathData="M52,32 L78,27 L76,35 L58,37 L55,47 L73,46 L70,53 L53,54 L48,75 L41,75 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="45"
+                android:startY="27"
+                android:endX="78"
+                android:endY="75"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#00F0FF" />
+                <item android:offset="0.5" android:color="#2979FF" />
+                <item android:offset="1.0" android:color="#0D47A1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner Core Metallic Highlight -->
+    <path
+        android:pathData="M44,38 L48,34 L62,56 L58,60 Z"
+        android:fillColor="#80FFFFFF" />
+
+    <!-- Sharp Bottom Saber Dart -->
+    <path
+        android:pathData="M54,64 L65,81 L56,77 Z"
+        android:fillColor="#00F0FF" />
+</vector>
