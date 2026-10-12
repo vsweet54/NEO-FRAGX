@@ -67,7 +67,11 @@ fun RootShizukuScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp)
+                    ) {
                         Text(
                             text = "Status Akses Tingkat Sistem",
                             fontSize = 14.sp,
@@ -81,7 +85,7 @@ fun RootShizukuScreen(
                         )
                     }
                     StatusBadge(
-                        text = if (rootStatus.hasRoot) "ROOT ACTIVE" else if (rootStatus.hasShizuku) "SHIZUKU" else "USERLAND",
+                        text = if (rootStatus.hasRoot) "ROOT AKTIF" else if (rootStatus.hasShizuku) "SHIZUKU" else "USERLAND",
                         color = if (rootStatus.hasRoot) StatusSuccess else if (rootStatus.hasShizuku) NeonBlue else StatusWarning
                     )
                 }

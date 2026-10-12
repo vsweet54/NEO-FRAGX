@@ -43,12 +43,24 @@ fun OptimizationScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // States matching Screenshot 1
+    // Persistent States from SharedPreferences (SURVIVES APP EXIT & RESTART!)
     var isCleaningCache by remember { mutableStateOf(false) }
     var isKillingApps by remember { mutableStateOf(false) }
-    var lightningTouchActive by remember { mutableStateOf(false) }
-    var wifiLatencyReductionActive by remember { mutableStateOf(true) }
+    var lightningTouchActive by remember { mutableStateOf(gameOptimizer.isLightningTouchEnabled()) }
+    var wifiLatencyReductionActive by remember { mutableStateOf(gameOptimizer.isWifiLatencyReductionEnabled()) }
+    var autoJunkActive by remember { mutableStateOf(gameOptimizer.isAutoJunkCleanerEnabled()) }
+    var autoJunkInterval by remember { mutableStateOf(gameOptimizer.getAutoCleanIntervalMinutes()) }
     var artCompiling by remember { mutableStateOf(false) }
+
+    // Audio & Ping states
+    var isRunningSpeakerCleaner by remember { mutableStateOf(false) }
+    var speakerCleanerProgress by remember { mutableStateOf(0f) }
+    var activeDns by remember { mutableStateOf(gameOptimizer.getActiveDnsMode()) }
+
+    var mlbbPingMs by remember { mutableStateOf<Long?>(null) }
+    var pubgPingMs by remember { mutableStateOf<Long?>(null) }
+    var ffPingMs by remember { mutableStateOf<Long?>(null) }
+    var isPingingServers by remember { mutableStateOf(false) }
 
     var lastCleanedMsg by remember { mutableStateOf<String?>(null) }
 
@@ -56,6 +68,8 @@ fun OptimizationScreen(
     val isBatteryIgnored = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && powerManager != null) {
         powerManager.isIgnoringBatteryOptimizations(context.packageName)
     } else false
+    var canModifySettings by remember { mutableStateOf(gameOptimizer.canModifySystemSettings()) }
+    var showPermissionDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -163,12 +177,11 @@ fun OptimizationScreen(
                 onClick = {
                     isCleaningCache = true
                     scope.launch {
-                        val (_, freedBytes) = gameOptimizer.trimRamMemory()
+                        val (_, freedBytes) = gameOptimizer.cleanAllJunkAndCache()
                         val mb = freedBytes / (1024 * 1024)
                         lastCleanedMsg = "Berhasil membersihkan cache dan membebaskan ~$mb MB memori!"
                         isCleaningCache = false
-                        gameOptimizer.addLog("CACHE_CLEAN", "Smart Cache Cleaner membebaskan ~$mb MB", "SUCCESS")
-                        Toast.makeText(context, "Cache berhasil dibersihkan! (~$mb MB)", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Cache & sampah dibersihkan! (~$mb MB)", Toast.LENGTH_SHORT).show()
                     }
                 }
             )
@@ -197,38 +210,319 @@ fun OptimizationScreen(
             )
         }
 
-        // 4. [SENTUHAN] Lightning Touch Responsive
+        // 4. [SENTUHAN] Lightning Touch Responsive (TETAP AKTIF SAAT KELUAR APLIKASI!)
         item {
             AdvancedSetupItem(
                 categoryTag = "SENTUHAN",
                 title = "Lightning Touch Responsive",
-                subtitle = "Tingkatkan respons layar digitizer secara instan",
-                statusText = if (lightningTouchActive) "• Aktif" else "• Tidak Aktif",
+                subtitle = "Tingkatkan respons layar (Pointer speed 7, low slop & Foreground Service anti-reset)",
+                statusText = if (lightningTouchActive) "• Aktif (Service Latar Belakang)" else "• Tidak Aktif",
                 statusColor = if (lightningTouchActive) StatusSuccess else StatusWarning,
                 icon = Icons.Default.TouchApp,
                 onClick = {
-                    lightningTouchActive = !lightningTouchActive
-                    gameOptimizer.addLog("TOUCH", "Lightning Touch Responsive: $lightningTouchActive")
-                    Toast.makeText(context, if (lightningTouchActive) "Lightning Touch diaktifkan!" else "Lightning Touch dinonaktifkan", Toast.LENGTH_SHORT).show()
+                    val nextState = !lightningTouchActive
+                    lightningTouchActive = nextState
+                    scope.launch {
+                        gameOptimizer.setLightningTouchEnabled(nextState)
+                        if (nextState) {
+                            if (!gameOptimizer.canModifySystemSettings()) {
+                                showPermissionDialog = true
+                            }
+                            Toast.makeText(context, "Lightning Touch Aktif! Berjalan di latar belakang saat keluar.", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Lightning Touch Dinonaktifkan", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             )
         }
 
-        // 5. [JARINGAN] Latency Reduction (WI-FI)
+        // Card info anti-mati saat keluar aplikasi jika touch aktif
+        if (lightningTouchActive || autoJunkActive) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0C1929))
+                        .border(1.dp, NeonCyan.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.Shield, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Engine Latar Belakang Tetap Aktif",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NeonCyan
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Foreground Service berjalan di bilah notifikasi untuk memastikan sentuhan kilat dan pembersih sampah tidak dimatikan Android saat Anda keluar atau membuka game.",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            lineHeight = 15.sp
+                        )
+                        if (!canModifySettings) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            CyberButton(
+                                text = "Izinkan Ubah Pengaturan Sistem",
+                                icon = Icons.Default.Security,
+                                onClick = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                        val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. [JARINGAN] Latency Reduction (WI-FI) (PERMANEN TERSIMPAN)
         item {
             AdvancedSetupItem(
                 categoryTag = "JARINGAN",
                 title = "Latency Reduction (WI-FI)",
-                subtitle = "Optimalkan latensi koneksi & prioritaskan paket game",
-                statusText = if (wifiLatencyReductionActive) "• Aktif" else "• Tidak Aktif",
+                subtitle = "Optimalkan TCP delack & prioritaskan paket game",
+                statusText = if (wifiLatencyReductionActive) "• Aktif (Tersimpan)" else "• Tidak Aktif",
                 statusColor = if (wifiLatencyReductionActive) StatusSuccess else StatusWarning,
                 icon = Icons.Default.Wifi,
                 onClick = {
-                    wifiLatencyReductionActive = !wifiLatencyReductionActive
-                    gameOptimizer.addLog("NETWORK", "Latency Reduction Wi-Fi: $wifiLatencyReductionActive")
-                    Toast.makeText(context, if (wifiLatencyReductionActive) "Wi-Fi Latency Reduction diaktifkan!" else "Wi-Fi Latency dinonaktifkan", Toast.LENGTH_SHORT).show()
+                    val nextState = !wifiLatencyReductionActive
+                    wifiLatencyReductionActive = nextState
+                    scope.launch {
+                        gameOptimizer.setWifiLatencyReductionEnabled(nextState)
+                        Toast.makeText(context, if (nextState) "Wi-Fi Latency Reduction Aktif & Tersimpan!" else "Wi-Fi Latency Dinonaktifkan", Toast.LENGTH_SHORT).show()
+                    }
                 }
             )
+        }
+
+        // 6. [BARU] Pembersih Sampah Otomatis (Auto Junk & RAM Cleaner)
+        item {
+            CyberCard(glow = autoJunkActive) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF0C1826))
+                                    .border(1.dp, CyberCardStroke, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(text = "AUTO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = NeonCyan)
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Pembersih Sampah Otomatis",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Membersihkan cache latar belakang dan membebaskan RAM secara periodik.",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+
+                    Switch(
+                        checked = autoJunkActive,
+                        onCheckedChange = { active ->
+                            autoJunkActive = active
+                            gameOptimizer.setAutoJunkCleanerEnabled(active)
+                            Toast.makeText(context, if (active) "Auto Cleaner Aktif ($autoJunkInterval Menit)" else "Auto Cleaner Nonaktif", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = NeonCyan,
+                            checkedTrackColor = NeonBlueDark,
+                            uncheckedTrackColor = CyberDark
+                        )
+                    )
+                }
+
+                if (autoJunkActive) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(text = "Pilih Interval Pembersihan Otomatis:", fontSize = 11.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val intervals = listOf(15, 30, 60)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        intervals.forEach { intv ->
+                            val isSel = autoJunkInterval == intv
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .border(1.dp, if (isSel) NeonCyan else CyberCardStroke, RoundedCornerShape(8.dp))
+                                    .background(if (isSel) NeonCyan.copy(alpha = 0.15f) else Color(0xFF0B121C))
+                                    .clickable {
+                                        autoJunkInterval = intv
+                                        gameOptimizer.setAutoCleanIntervalMinutes(intv)
+                                        Toast.makeText(context, "Interval pembersihan: Setiap $intv Menit", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "$intv Menit",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSel) NeonCyan else TextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. [BARU] Penguji Ping Server Game Real-time (Anti-Lag Ping Tester)
+        item {
+            CyberCard {
+                SectionHeader(
+                    title = "Uji Ping Game Real-time (Network Tester)",
+                    subtitle = "Periksa koneksi latensi ke server game populer secara langsung",
+                    icon = Icons.Default.Speed
+                ) {
+                    CyberButton(
+                        text = if (isPingingServers) "..." else "Tes Ping",
+                        icon = Icons.Default.Refresh,
+                        enabled = !isPingingServers,
+                        onClick = {
+                            isPingingServers = true
+                            scope.launch {
+                                mlbbPingMs = gameOptimizer.measureServerPing("103.28.54.1", 80) // MLBB SEA
+                                pubgPingMs = gameOptimizer.measureServerPing("pubgmobile.com", 443) // PUBG
+                                ffPingMs = gameOptimizer.measureServerPing("freefiremobile.com", 443) // Free Fire
+                                isPingingServers = false
+                                Toast.makeText(context, "Pengujian ping server game selesai!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PingGameCard(title = "MLBB (SEA)", ping = mlbbPingMs, modifier = Modifier.weight(1f))
+                    PingGameCard(title = "PUBG Mobile", ping = pubgPingMs, modifier = Modifier.weight(1f))
+                    PingGameCard(title = "Free Fire", ping = ffPingMs, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+
+        // 8. [BARU] Private DNS Gaming Anti-Lag Switcher
+        item {
+            CyberCard {
+                SectionHeader(
+                    title = "Gaming DNS Anti-Lag",
+                    subtitle = "Pilih DNS gaming untuk mengurangi jitter paket dan proteksi DDoS",
+                    icon = Icons.Default.Dns
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                val dnsOptions = listOf("Bawaan (ISP)", "Cloudflare (1.1.1.1 Gaming)", "Google DNS (8.8.8.8)")
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    dnsOptions.forEach { opt ->
+                        val isSelected = activeDns == opt
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, if (isSelected) NeonCyan else CyberCardStroke, RoundedCornerShape(8.dp))
+                                .background(if (isSelected) NeonCyan.copy(alpha = 0.12f) else Color(0xFF0C1420))
+                                .clickable {
+                                    activeDns = opt
+                                    scope.launch {
+                                        gameOptimizer.setGamingDns(opt)
+                                        Toast.makeText(context, "DNS diubah ke $opt", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = opt,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) NeonCyan else TextPrimary
+                                )
+                                if (isSelected) {
+                                    StatusBadge(text = "TERPILIH", color = NeonCyan)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 9. [BARU] Pembersih Speaker & Resonansi Getar (Speaker Cleaner 165Hz)
+        item {
+            CyberCard {
+                SectionHeader(
+                    title = "Pembersih Debu & Air Speaker",
+                    subtitle = "Menghasilkan frekuensi resonansi sonik 165Hz untuk mengeluarkan kotoran dari lubang speaker",
+                    icon = Icons.Default.VolumeUp
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (isRunningSpeakerCleaner) {
+                    MetricProgressBar(
+                        title = "Mengeluarkan Resonansi Sonik 165Hz...",
+                        valueLabel = String.format("%.0f%%", speakerCleanerProgress * 100f),
+                        progress = speakerCleanerProgress,
+                        color = StatusWarning
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                CyberButton(
+                    text = if (isRunningSpeakerCleaner) "Sedang Membersihkan..." else "Mulai Pembersihan Speaker (5 Detik)",
+                    icon = Icons.Default.GraphicEq,
+                    enabled = !isRunningSpeakerCleaner,
+                    color = StatusWarning,
+                    onClick = {
+                        isRunningSpeakerCleaner = true
+                        speakerCleanerProgress = 0f
+                        scope.launch {
+                            gameOptimizer.runSpeakerCleanerTone(durationSec = 5) { prog ->
+                                speakerCleanerProgress = prog
+                            }
+                            isRunningSpeakerCleaner = false
+                            Toast.makeText(context, "Pembersihan speaker selesai!", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
 
         // ART AOT Optimizer
@@ -329,6 +623,48 @@ fun OptimizationScreen(
             }
         }
     }
+
+    if (showPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            title = {
+                Text(
+                    text = "Izin Pengaturan Sistem Diperlukan",
+                    fontWeight = FontWeight.Bold,
+                    color = NeonCyan
+                )
+            },
+            text = {
+                Text(
+                    text = "Agar Lightning Touch dapat mempertahankan respon sentuhan layar tingkat tinggi (Pointer Speed 7) di sistem Android non-root, izinkan hak akses 'Ubah Pengaturan Sistem'.\n\nJika perangkat sudah memiliki Root/Shizuku, sistem langsung menginjeksi perintah kernel secara otomatis.",
+                    color = TextPrimary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            },
+            confirmButton = {
+                CyberButton(
+                    text = "Buka Izin Sekarang",
+                    icon = Icons.Default.Launch,
+                    onClick = {
+                        showPermissionDialog = false
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        }
+                    }
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text(text = "Tutup", color = TextSecondary)
+                }
+            },
+            containerColor = CyberDark
+        )
+    }
 }
 
 @Composable
@@ -398,6 +734,39 @@ private fun AdvancedSetupItem(
                     modifier = Modifier.size(16.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PingGameCard(title: String, ping: Long?, modifier: Modifier = Modifier) {
+    val (color, pingStr) = when {
+        ping == null -> Pair(TextSecondary, "- ms")
+        ping < 0 -> Pair(StatusDanger, "Timeout")
+        ping < 50 -> Pair(StatusSuccess, "$ping ms")
+        ping < 100 -> Pair(NeonCyan, "$ping ms")
+        ping < 150 -> Pair(StatusWarning, "$ping ms")
+        else -> Pair(StatusDanger, "$ping ms")
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF0B121C))
+            .border(1.dp, CyberCardStroke, RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = title, fontSize = 10.sp, color = TextSecondary, maxLines = 1)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = pingStr,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                fontFamily = FontFamily.Monospace
+            )
         }
     }
 }

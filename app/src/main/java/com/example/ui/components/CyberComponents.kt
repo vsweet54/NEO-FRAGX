@@ -123,7 +123,7 @@ fun StatusBadge(
             .clip(RoundedCornerShape(6.dp))
             .border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
             .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -131,7 +131,9 @@ fun StatusBadge(
             color = color,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 0.5.sp
+            letterSpacing = 0.5.sp,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

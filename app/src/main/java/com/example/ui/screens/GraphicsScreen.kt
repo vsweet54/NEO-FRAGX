@@ -32,22 +32,22 @@ fun GraphicsScreen(
 ) {
     val context = LocalContext.current
 
-    // Switches matching Screenshot 2 & 3
-    var modeGrafisLancar by remember { mutableStateOf(true) }
-    var akselerasiHardware by remember { mutableStateOf(true) }
-    var akselerasiHardwareSF by remember { mutableStateOf(true) }
-    var kontrolIntervalGpu by remember { mutableStateOf(false) }
-    var modeAntiAliasingPaksa by remember { mutableStateOf(false) }
+    // Switches matching Screenshot 2 & 3 (Tersimpan Permanen di Sistem)
+    var modeGrafisLancar by remember { mutableStateOf(gameOptimizer.getGraphicBool("mode_grafis_lancar", true)) }
+    var akselerasiHardware by remember { mutableStateOf(gameOptimizer.getGraphicBool("akselerasi_hardware", true)) }
+    var akselerasiHardwareSF by remember { mutableStateOf(gameOptimizer.getGraphicBool("akselerasi_hardware_sf", true)) }
+    var kontrolIntervalGpu by remember { mutableStateOf(gameOptimizer.getGraphicBool("kontrol_interval_gpu", false)) }
+    var modeAntiAliasingPaksa by remember { mutableStateOf(gameOptimizer.getGraphicBool("anti_aliasing_paksa", false)) }
 
     // Chip selections matching Screenshot 2 & 3
-    var komposisiTampilan by remember { mutableStateOf("GPU") } // CPU, GPU, SF, Auto
-    var rendererGpu by remember { mutableStateOf("Vulkan") } // OpenGL ES, Vulkan, OpenGL Lite, Vulkan Lite
+    var komposisiTampilan by remember { mutableStateOf(gameOptimizer.getGraphicString("komposisi_tampilan", "GPU")) }
+    var rendererGpu by remember { mutableStateOf(gameOptimizer.getGraphicString("renderer_gpu", "Vulkan")) }
 
     // Info dialog state
     var infoDialogTitle by remember { mutableStateOf<String?>(null) }
     var infoDialogDesc by remember { mutableStateOf("") }
 
-    var globalDownscalePercent by remember { mutableStateOf(100) }
+    var globalDownscalePercent by remember { mutableStateOf(gameOptimizer.getGraphicString("downscale_percent", "100").toIntOrNull() ?: 100) }
 
     LazyColumn(
         modifier = Modifier
@@ -91,7 +91,7 @@ fun GraphicsScreen(
                 checked = modeGrafisLancar,
                 onCheckedChange = {
                     modeGrafisLancar = it
-                    gameOptimizer.addLog("GRAPHIC_SETUP", "Mode Grafis Lancar: $it")
+                    gameOptimizer.setGraphicBool("mode_grafis_lancar", it)
                     Toast.makeText(context, "Mode Grafis Lancar: $it", Toast.LENGTH_SHORT).show()
                 },
                 onInfoClick = {
@@ -110,7 +110,7 @@ fun GraphicsScreen(
                 checked = akselerasiHardware,
                 onCheckedChange = {
                     akselerasiHardware = it
-                    gameOptimizer.addLog("GRAPHIC_SETUP", "Akselerasi Hardware: $it")
+                    gameOptimizer.setGraphicBool("akselerasi_hardware", it)
                 },
                 onInfoClick = {
                     infoDialogTitle = "Akselerasi Hardware"
@@ -128,7 +128,7 @@ fun GraphicsScreen(
                 checked = akselerasiHardwareSF,
                 onCheckedChange = {
                     akselerasiHardwareSF = it
-                    gameOptimizer.addLog("GRAPHIC_SETUP", "Akselerasi Hardware SF: $it")
+                    gameOptimizer.setGraphicBool("akselerasi_hardware_sf", it)
                 },
                 onInfoClick = {
                     infoDialogTitle = "Akselerasi Hardware SF"
@@ -146,7 +146,7 @@ fun GraphicsScreen(
                 checked = kontrolIntervalGpu,
                 onCheckedChange = {
                     kontrolIntervalGpu = it
-                    gameOptimizer.addLog("GRAPHIC_SETUP", "Kontrol Interval GPU: $it")
+                    gameOptimizer.setGraphicBool("kontrol_interval_gpu", it)
                 },
                 onInfoClick = {
                     infoDialogTitle = "Kontrol Interval GPU"
@@ -164,7 +164,7 @@ fun GraphicsScreen(
                 checked = modeAntiAliasingPaksa,
                 onCheckedChange = {
                     modeAntiAliasingPaksa = it
-                    gameOptimizer.addLog("GRAPHIC_SETUP", "MSAA Anti-Aliasing Paksa: $it")
+                    gameOptimizer.setGraphicBool("anti_aliasing_paksa", it)
                 },
                 onInfoClick = {
                     infoDialogTitle = "Mode Anti-Aliasing Paksa"
@@ -238,6 +238,7 @@ fun GraphicsScreen(
                                 .background(if (isSelected) NeonCyan.copy(alpha = 0.15f) else Color(0xFF0B121C))
                                 .clickable {
                                     komposisiTampilan = opt
+                                    gameOptimizer.setGraphicString("komposisi_tampilan", opt)
                                     Toast.makeText(context, "Komposisi tampilan: $opt", Toast.LENGTH_SHORT).show()
                                 }
                                 .padding(vertical = 12.dp),
@@ -310,6 +311,7 @@ fun GraphicsScreen(
                                 .background(if (isSelected) NeonCyan.copy(alpha = 0.15f) else Color(0xFF0B121C))
                                 .clickable {
                                     rendererGpu = rend
+                                    gameOptimizer.setGraphicString("renderer_gpu", rend)
                                     Toast.makeText(context, "Renderer terpilih: $rend", Toast.LENGTH_SHORT).show()
                                 }
                                 .padding(vertical = 10.dp, horizontal = 2.dp),
@@ -352,6 +354,7 @@ fun GraphicsScreen(
                                 .background(if (isSelected) NeonCyan.copy(alpha = 0.15f) else Color(0xFF0C1420))
                                 .clickable {
                                     globalDownscalePercent = s
+                                    gameOptimizer.setGraphicString("downscale_percent", s.toString())
                                     Toast.makeText(context, "Resolusi disetel ke $s%", Toast.LENGTH_SHORT).show()
                                     gameOptimizer.addLog("GRAPHICS", "Skala resolusi sistem disetel ke $s%")
                                 }

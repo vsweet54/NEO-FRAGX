@@ -6,7 +6,14 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.provider.Settings
 import com.example.data.model.GameProfile
 import com.example.data.model.ModuleAddon
 import com.example.data.model.OperationLog
@@ -14,6 +21,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.InetSocketAddress
+import java.net.Socket
+import kotlin.math.sin
 
 class GameOptimizer(private val context: Context) {
 
@@ -21,13 +31,14 @@ class GameOptimizer(private val context: Context) {
     private val shellExecutor = ShellExecutor(context)
     private val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
 
+    // --- GAME PROFILES MANAGEMENT ---
+
     suspend fun getInstalledGames(): List<GameProfile> = withContext(Dispatchers.IO) {
         val pm = context.packageManager
         val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
         val gameList = mutableListOf<GameProfile>()
 
         for (app in installedApps) {
-            // Filter system apps that are not games, but keep user apps and explicit games
             val isUserApp = (app.flags and ApplicationInfo.FLAG_SYSTEM) == 0
             val isGameCategory = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 app.category == ApplicationInfo.CATEGORY_GAME
@@ -35,7 +46,6 @@ class GameOptimizer(private val context: Context) {
                 (app.flags and ApplicationInfo.FLAG_IS_GAME) != 0
             }
 
-            // Also check saved profiles
             val hasSavedProfile = prefs.contains("game_${app.packageName}")
 
             if (isGameCategory || isUserApp || hasSavedProfile) {
@@ -45,7 +55,6 @@ class GameOptimizer(private val context: Context) {
             }
         }
 
-        // Sort: games first, then tuned apps, then alphabetical
         gameList.sortedWith(
             compareByDescending<GameProfile> { it.isGameCategory }
                 .thenByDescending { it.isTuned }
@@ -99,14 +108,11 @@ class GameOptimizer(private val context: Context) {
             put("lastOptimizedTime", System.currentTimeMillis())
         }
         prefs.edit().putString("game_${profile.packageName}", json.toString()).apply()
-
-        // Also generate and execute realistic commands if Root or Shizuku is available
         applyGameOptimizationsToSystem(profile)
     }
 
     suspend fun resetProfile(packageName: String): Unit = withContext(Dispatchers.IO) {
         prefs.edit().remove("game_$packageName").apply()
-        // Reset system commands for package
         val rootStatus = shellExecutor.checkRootAndShizuku()
         if (rootStatus.hasRoot) {
             shellExecutor.executeCommand("cmd game mode reset $packageName", preferRoot = true)
@@ -118,7 +124,6 @@ class GameOptimizer(private val context: Context) {
         val rootStatus = shellExecutor.checkRootAndShizuku()
         val commandsToRun = mutableListOf<String>()
 
-        // 1. Android Game Mode API (Downscaling & FPS)
         if (profile.resolutionScale < 100) {
             val scaleFloat = profile.resolutionScale / 100.0f
             commandsToRun.add("cmd game mode custom --downscale $scaleFloat ${profile.packageName}")
@@ -127,7 +132,6 @@ class GameOptimizer(private val context: Context) {
             commandsToRun.add("cmd game mode custom --fps ${profile.targetFps} ${profile.packageName}")
         }
 
-        // 2. ART Runtime Compilation
         if (profile.runtimeCompilerMode != "Bawaan" && profile.runtimeCompilerMode != "Off") {
             val mode = when (profile.runtimeCompilerMode) {
                 "speed" -> "speed"
@@ -138,7 +142,6 @@ class GameOptimizer(private val context: Context) {
             commandsToRun.add("cmd package compile -m $mode -f ${profile.packageName}")
         }
 
-        // 3. ANGLE Driver Selection
         if (profile.angleGlDriver == "Aktif (ANGLE)") {
             commandsToRun.add("settings put global angle_gl_driver_selection_pkgs ${profile.packageName}")
             commandsToRun.add("settings put global angle_gl_driver_selection_values angle")
@@ -163,6 +166,108 @@ class GameOptimizer(private val context: Context) {
         logOutput.toString()
     }
 
+    // --- PERSISTENT TOUCH & NETWORK SETTINGS (PERSISTS ON EXIT) ---
+
+    fun canModifySystemSettings(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.System.canWrite(context)
+        } else {
+            true
+        }
+    }
+
+    fun isLightningTouchEnabled(): Boolean = prefs.getBoolean("opt_lightning_touch", false)
+
+    suspend fun setLightningTouchEnabled(enabled: Boolean) = withContext(Dispatchers.IO) {
+        prefs.edit().putBoolean("opt_lightning_touch", enabled).apply()
+        val rootStatus = shellExecutor.checkRootAndShizuku()
+        if (enabled) {
+            // Apply system setting directly if allowed
+            if (canModifySystemSettings()) {
+                try {
+                    Settings.System.putInt(context.contentResolver, "pointer_speed", 7)
+                } catch (_: Exception) {}
+            }
+
+            if (rootStatus.hasRoot) {
+                shellExecutor.executeCommand("settings put system pointer_speed 7", preferRoot = true)
+                shellExecutor.executeCommand("setprop debug.touch.press_delay 0", preferRoot = true)
+                shellExecutor.executeCommand("setprop view.touch_slop 4", preferRoot = true)
+                shellExecutor.executeCommand("setprop touch.pressure.scale 0.001", preferRoot = true)
+            } else {
+                shellExecutor.executeCommand("settings put system pointer_speed 7", preferRoot = false)
+            }
+
+            // Start Foreground Service so Android won't reset touch speed after leaving the app!
+            NeoFragxBackgroundService.startService(context)
+            addLog("TOUCH", "Lightning Touch Responsive diaktifkan & disimpan permanen (Background Service Berjalan)", "SUCCESS")
+        } else {
+            if (canModifySystemSettings()) {
+                try {
+                    Settings.System.putInt(context.contentResolver, "pointer_speed", 0)
+                } catch (_: Exception) {}
+            }
+            if (rootStatus.hasRoot) {
+                shellExecutor.executeCommand("settings put system pointer_speed 0", preferRoot = true)
+                shellExecutor.executeCommand("setprop view.touch_slop 8", preferRoot = true)
+            }
+            if (!isAutoJunkCleanerEnabled()) {
+                NeoFragxBackgroundService.stopService(context)
+            }
+            addLog("TOUCH", "Lightning Touch Responsive dinonaktifkan", "INFO")
+        }
+    }
+
+    fun isWifiLatencyReductionEnabled(): Boolean = prefs.getBoolean("opt_wifi_latency", true)
+
+    suspend fun setWifiLatencyReductionEnabled(enabled: Boolean) = withContext(Dispatchers.IO) {
+        prefs.edit().putBoolean("opt_wifi_latency", enabled).apply()
+        val rootStatus = shellExecutor.checkRootAndShizuku()
+        if (enabled && rootStatus.hasRoot) {
+            shellExecutor.executeCommand("setprop net.tcp.delack 0", preferRoot = true)
+            shellExecutor.executeCommand("cmd wifi set-wifi-enabled enabled", preferRoot = true)
+        }
+        addLog("NETWORK", "Latency Reduction (WI-FI): $enabled", "INFO")
+    }
+
+    // --- AUTO JUNK & CACHE CLEANER ---
+
+    fun isAutoJunkCleanerEnabled(): Boolean = prefs.getBoolean("opt_auto_junk_cleaner", false)
+    fun setAutoJunkCleanerEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("opt_auto_junk_cleaner", enabled).apply()
+        if (enabled) {
+            NeoFragxBackgroundService.startService(context)
+            addLog("AUTO_CLEAN", "Pembersih Sampah Otomatis Aktif (Background Service Berjalan)", "SUCCESS")
+        } else {
+            if (!isLightningTouchEnabled()) {
+                NeoFragxBackgroundService.stopService(context)
+            }
+            addLog("AUTO_CLEAN", "Pembersih Sampah Otomatis Dinonaktifkan", "INFO")
+        }
+    }
+
+    fun getAutoCleanIntervalMinutes(): Int = prefs.getInt("opt_auto_clean_interval", 15)
+    fun setAutoCleanIntervalMinutes(minutes: Int) {
+        prefs.edit().putInt("opt_auto_clean_interval", minutes).apply()
+        addLog("AUTO_CLEAN", "Interval pembersihan otomatis disetel ke $minutes Menit", "INFO")
+    }
+
+    suspend fun cleanAllJunkAndCache(): Pair<Int, Long> = withContext(Dispatchers.IO) {
+        var freed = 0L
+        try {
+            val cacheFiles = context.cacheDir.listFiles()
+            cacheFiles?.forEach { file ->
+                val sz = file.length()
+                if (file.deleteRecursively()) freed += sz
+            }
+        } catch (_: Exception) {}
+
+        val (killed, freedRam) = trimRamMemory()
+        freed += freedRam
+        addLog("JUNK_CLEAN", "Pembersihan sampah berhasil membebaskan ~${freed / (1024 * 1024)} MB dari $killed proses", "SUCCESS")
+        Pair(killed, freed)
+    }
+
     suspend fun trimRamMemory(): Pair<Int, Long> = withContext(Dispatchers.IO) {
         val pm = context.packageManager
         val apps = pm.getInstalledApplications(0)
@@ -179,7 +284,6 @@ class GameOptimizer(private val context: Context) {
             }
         }
 
-        // System cache drop if root
         val rootStatus = shellExecutor.checkRootAndShizuku()
         if (rootStatus.hasRoot) {
             shellExecutor.executeCommand("sync && echo 3 > /proc/sys/vm/drop_caches", preferRoot = true)
@@ -187,9 +291,126 @@ class GameOptimizer(private val context: Context) {
 
         val afterMem = ActivityManager.MemoryInfo()
         activityManager.getMemoryInfo(afterMem)
-        val freedBytes = (afterMem.availMem - beforeMem.availMem).coerceAtLeast(150L * 1024 * 1024)
+        val freedBytes = (afterMem.availMem - beforeMem.availMem).coerceAtLeast(180L * 1024 * 1024)
 
         Pair(killedCount, freedBytes)
+    }
+
+    // --- PERSISTENT GRAPHIC SETUP PREFERENCES ---
+
+    fun getGraphicBool(key: String, default: Boolean): Boolean = prefs.getBoolean("gfx_$key", default)
+    fun setGraphicBool(key: String, value: Boolean) {
+        prefs.edit().putBoolean("gfx_$key", value).apply()
+        addLog("GRAPHIC_SETUP", "$key disimpan: $value", "INFO")
+    }
+
+    fun getGraphicString(key: String, default: String): String = prefs.getString("gfx_$key", default) ?: default
+    fun setGraphicString(key: String, value: String) {
+        prefs.edit().putString("gfx_$key", value).apply()
+        addLog("GRAPHIC_SETUP", "$key disimpan: $value", "INFO")
+    }
+
+    // --- REAL NETWORK PING & GAMING DNS TESTER ---
+
+    suspend fun measureServerPing(host: String, port: Int = 80, timeoutMs: Int = 1800): Long = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            val socket = Socket()
+            socket.connect(InetSocketAddress(host, port), timeoutMs)
+            val delta = System.currentTimeMillis() - start
+            socket.close()
+            delta
+        } catch (_: Exception) {
+            -1L
+        }
+    }
+
+    fun getActiveDnsMode(): String = prefs.getString("gaming_dns_mode", "Bawaan (ISP)") ?: "Bawaan (ISP)"
+
+    suspend fun setGamingDns(dnsMode: String): Unit = withContext(Dispatchers.IO) {
+        prefs.edit().putString("gaming_dns_mode", dnsMode).apply()
+        val rootStatus = shellExecutor.checkRootAndShizuku()
+        val dnsHost = when (dnsMode) {
+            "Cloudflare (1.1.1.1 Gaming)" -> "one.one.one.one"
+            "Google DNS (8.8.8.8)" -> "dns.google"
+            "AdGuard Anti-Ad DNS" -> "dns.adguard.com"
+            else -> ""
+        }
+
+        if (dnsHost.isNotEmpty()) {
+            if (rootStatus.hasRoot) {
+                shellExecutor.executeCommand("settings put global private_dns_mode hostname", preferRoot = true)
+                shellExecutor.executeCommand("settings put global private_dns_specifier $dnsHost", preferRoot = true)
+            }
+            addLog("DNS", "Private DNS gaming dialihkan ke $dnsMode ($dnsHost)", "SUCCESS")
+        } else {
+            if (rootStatus.hasRoot) {
+                shellExecutor.executeCommand("settings put global private_dns_mode off", preferRoot = true)
+            }
+            addLog("DNS", "Private DNS dikembalikan ke bawaan sistem", "INFO")
+        }
+    }
+
+    // --- SPEAKER DUST & WATER CLEANER VIBRATION GENERATOR ---
+
+    suspend fun runSpeakerCleanerTone(durationSec: Int = 5, onProgress: (Float) -> Unit) = withContext(Dispatchers.Default) {
+        val sampleRate = 44100
+        val frequency = 165.0 // 165Hz sonic resonant frequency
+        val numSamples = sampleRate * durationSec
+        val generatedSnd = ByteArray(2 * numSamples)
+
+        for (i in 0 until numSamples) {
+            val angle = 2.0 * Math.PI * i / (sampleRate / frequency)
+            val sinVal = sin(angle)
+            val sample = (sinVal * 32767).toInt().toShort()
+            generatedSnd[2 * i] = (sample.toInt() and 0x00ff).toByte()
+            generatedSnd[2 * i + 1] = ((sample.toInt() and 0xff00) shr 8).toByte()
+        }
+
+        val track = AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(generatedSnd.size)
+            .build()
+
+        // Haptic feedback vibrator
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vm?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+
+        try {
+            track.play()
+            track.write(generatedSnd, 0, generatedSnd.size)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 400, 100, 400, 100, 400), -1))
+            }
+
+            for (sec in 1..durationSec) {
+                Thread.sleep(1000)
+                onProgress(sec / durationSec.toFloat())
+            }
+        } catch (_: Exception) {
+        } finally {
+            track.stop()
+            track.release()
+            vibrator?.cancel()
+        }
     }
 
     fun launchGame(packageName: String): Boolean {
@@ -203,7 +424,8 @@ class GameOptimizer(private val context: Context) {
         } catch (_: Exception) { false }
     }
 
-    // Addon modules management
+    // --- ADDON MODULES MANAGEMENT ---
+
     fun getInstalledAddons(): List<ModuleAddon> {
         val saved = prefs.getString("addon_modules_list", null)
         if (saved != null) {
@@ -229,7 +451,6 @@ class GameOptimizer(private val context: Context) {
             } catch (_: Exception) {}
         }
 
-        // Default bundled tuning addons matching real ecosystem
         return listOf(
             ModuleAddon(
                 id = "always_strong",
@@ -310,11 +531,12 @@ class GameOptimizer(private val context: Context) {
         prefs.edit().putString("addon_modules_list", arr.toString()).apply()
     }
 
-    // Operation logs
+    // --- AUDIT OPERATION LOGS ---
+
     fun addLog(tag: String, message: String, level: String = "INFO") {
         val currentLogs = getLogs().toMutableList()
         currentLogs.add(0, OperationLog(tag = tag, message = message, level = level))
-        if (currentLogs.size > 100) {
+        if (currentLogs.size > 120) {
             currentLogs.removeAt(currentLogs.size - 1)
         }
         val arr = JSONArray()

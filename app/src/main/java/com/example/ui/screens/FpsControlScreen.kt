@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.tuner.FloatingFpsService
 import com.example.ui.components.*
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
@@ -248,10 +249,12 @@ fun FpsControlScreen() {
                                     context.startActivity(intent)
                                 } else {
                                     isOverlayEnabled = true
-                                    Toast.makeText(context, "Overlay FPS diaktifkan!", Toast.LENGTH_SHORT).show()
+                                    FloatingFpsService.startOverlay(context)
+                                    Toast.makeText(context, "Overlay FPS diaktifkan di atas layar game!", Toast.LENGTH_SHORT).show()
                                 }
                             } else {
                                 isOverlayEnabled = false
+                                FloatingFpsService.stopOverlay(context)
                                 Toast.makeText(context, "Overlay FPS dinonaktifkan", Toast.LENGTH_SHORT).show()
                             }
                         },
