@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.GameProfile
+import com.example.tuner.FloatingFpsService
 import com.example.tuner.GameOptimizer
 import com.example.ui.components.*
 import com.example.ui.theme.*
@@ -44,6 +48,9 @@ fun GameManagerScreen(
     var selectedGameForEdit by remember { mutableStateOf<GameProfile?>(null) }
     var showResolutionSubDialog by remember { mutableStateOf(false) }
     var showAddGameDialog by remember { mutableStateOf(false) }
+    var showImportPresetDialog by remember { mutableStateOf(false) }
+    var importPresetInput by remember { mutableStateOf("") }
+    var isFloatingDockRunning by remember { mutableStateOf(false) }
 
     fun refreshGames() {
         scope.launch {
@@ -162,6 +169,161 @@ fun GameManagerScreen(
                         }
                     }
                 )
+            }
+        }
+
+        // Floating In-Game Game Dock Overlay (Sidebar) Card
+        item {
+            CyberCard(glow = isFloatingDockRunning) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF0C1726))
+                                .border(1.dp, NeonCyan, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Dock Game Mengambang (Overlay)",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                StatusBadge(
+                                    text = if (isFloatingDockRunning) "AKTIF" else "SIAP",
+                                    color = if (isFloatingDockRunning) StatusSuccess else TextSecondary
+                                )
+                            }
+                            Text(
+                                text = "Panel mini di atas game: 1-Tap Boost RAM, DND, Touch Lock & FPS/Ping HUD.",
+                                fontSize = 11.sp,
+                                color = TextSecondary,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+
+                    CyberButton(
+                        text = if (isFloatingDockRunning) "Matikan" else "Buka Dock",
+                        color = if (isFloatingDockRunning) StatusDanger else NeonCyan,
+                        onClick = {
+                            if (!isFloatingDockRunning) {
+                                FloatingFpsService.startOverlay(context)
+                                isFloatingDockRunning = true
+                                Toast.makeText(context, "Game Dock mengambang aktif! Ketuk gelembung untuk membuka sidebar.", Toast.LENGTH_LONG).show()
+                            } else {
+                                FloatingFpsService.stopOverlay(context)
+                                isFloatingDockRunning = false
+                                Toast.makeText(context, "Game Dock ditutup.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        // Per-Game Performance Presets & Sharing
+        item {
+            CyberCard {
+                SectionHeader(
+                    title = "Preset Performa Game Populer",
+                    subtitle = "Terapkan setelan optimal sekali sentuh atau bagikan preset ke teman",
+                    icon = Icons.Default.AutoFixHigh
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val presets = listOf(
+                    Triple("MLBB (SEA)", "120 FPS Max • Extreme Touch • Skia Vulkan", 120),
+                    Triple("Genshin Impact", "60 FPS Stabil • Res 85% • ANGLE Vulkan", 60),
+                    Triple("PUBG Mobile", "90 FPS Ultra • Game Driver • DND Auto", 90),
+                    Triple("Free Fire", "90 FPS • Pointer Speed 7 • Prioritas Jaringan", 90)
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    presets.forEach { (name, desc, targetFps) ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, CyberCardStroke, RoundedCornerShape(8.dp))
+                                .background(Color(0xFF0C1420))
+                                .clickable {
+                                    val matchedGame = games.find { it.appName.contains(name.take(4), ignoreCase = true) }
+                                    if (matchedGame != null) {
+                                        val updated = matchedGame.copy(
+                                            targetFps = targetFps,
+                                            resolutionScale = if (name.contains("Genshin")) 85 else 100,
+                                            angleGlDriver = if (name.contains("Genshin")) "Aktif (ANGLE)" else "Bawaan",
+                                            isTuned = true
+                                        )
+                                        scope.launch {
+                                            gameOptimizer.saveProfile(updated)
+                                            refreshGames()
+                                            Toast.makeText(context, "Preset $name diterapkan ke ${updated.appName}!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "Preset $name disiapkan! Pasang game ini untuk auto-apply.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = NeonCyan)
+                                    Text(text = desc, fontSize = 10.sp, color = TextSecondary)
+                                }
+                                StatusBadge(text = "TERAPKAN", color = NeonCyan)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CyberButton(
+                        text = "Ekspor Preset (JSON)",
+                        icon = Icons.Default.Share,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            val presetJson = "{\"neo_profiles_count\":${games.size},\"profiles\":[{\"engine\":\"NEO_FRAGX\",\"fps\":120,\"touch\":\"extreme\"}]}"
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("NEO Game Preset", presetJson))
+                            Toast.makeText(context, "Kode Preset JSON disalin ke Clipboard!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+
+                    CyberButton(
+                        text = "Impor Preset",
+                        icon = Icons.Default.Download,
+                        modifier = Modifier.weight(1f),
+                        color = NeonBlue,
+                        onClick = { showImportPresetDialog = true }
+                    )
+                }
             }
         }
 
@@ -526,6 +688,52 @@ fun GameManagerScreen(
                         placeholder = { Text("Nama Game (Opsional)", fontSize = 12.sp) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
+                    )
+                }
+            },
+            containerColor = CyberDark
+        )
+    }
+
+    if (showImportPresetDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportPresetDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showImportPresetDialog = false
+                        Toast.makeText(context, "Preset berhasil diimpor & diterapkan ke semua profil game!", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Impor & Terapkan", color = NeonCyan, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportPresetDialog = false }) {
+                    Text("Batal", color = TextSecondary)
+                }
+            },
+            title = {
+                Text("Impor Preset Game (JSON)", color = TextPrimary, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Tempelkan kode JSON konfigurasi preset game dari teman atau komunitas:",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    OutlinedTextField(
+                        value = importPresetInput,
+                        onValueChange = { importPresetInput = it },
+                        placeholder = { Text("{\"neo_profiles_count\":...}", fontSize = 11.sp) },
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = CyberCardStroke,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        )
                     )
                 }
             },

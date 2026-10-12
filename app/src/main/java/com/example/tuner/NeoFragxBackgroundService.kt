@@ -28,6 +28,9 @@ class NeoFragxBackgroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
     private lateinit var gameOptimizer: GameOptimizer
     private lateinit var shellExecutor: ShellExecutor
+    private lateinit var networkOptimizer: NetworkLatencyOptimizer
+    private lateinit var thermalManager: ThermalSafetyManager
+    private lateinit var telemetryManager: SystemTelemetryManager
     private val notificationId = 1001
     private val channelId = "neo_fragx_background_channel"
 
@@ -35,6 +38,9 @@ class NeoFragxBackgroundService : Service() {
         super.onCreate()
         gameOptimizer = GameOptimizer(applicationContext)
         shellExecutor = ShellExecutor(applicationContext)
+        networkOptimizer = NetworkLatencyOptimizer(applicationContext)
+        thermalManager = ThermalSafetyManager(applicationContext)
+        telemetryManager = SystemTelemetryManager(applicationContext)
         createNotificationChannel()
     }
 
@@ -86,6 +92,35 @@ class NeoFragxBackgroundService : Service() {
                 }
 
                 delay(intervalMins * 60 * 1000L)
+            }
+        }
+
+        // Loop 3: Network Latency Optimizer & Periodic DNS Flush (Every 60s)
+        serviceScope.launch {
+            while (isActive) {
+                if (networkOptimizer.isAutoDnsFlushEnabled()) {
+                    networkOptimizer.flushDnsCache()
+                }
+                if (networkOptimizer.isTrafficShapingEnabled()) {
+                    networkOptimizer.applyTrafficShaping()
+                }
+                delay(60000L)
+            }
+        }
+
+        // Loop 4: Thermal Safety Guard Watchdog (Every 10s)
+        serviceScope.launch {
+            while (isActive) {
+                if (thermalManager.isThermalAlertEnabled()) {
+                    val telemetry = telemetryManager.getTelemetry()
+                    val limit = thermalManager.getThermalLimitCelsius()
+                    if (telemetry.batteryTempCelsius >= limit && !thermalManager.isCoolingModeActive()) {
+                        thermalManager.triggerThermalWarningVibration()
+                        val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+                        updateNotification("⚠️ PERINGATAN PANAS: Suhu ${telemetry.batteryTempCelsius}°C melebihi batas aman ($timeStr)")
+                    }
+                }
+                delay(10000L)
             }
         }
     }

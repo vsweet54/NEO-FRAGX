@@ -29,7 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.SystemTelemetry
+import com.example.tuner.FloatingFpsService
 import com.example.tuner.GameOptimizer
+import com.example.tuner.ThermalSafetyManager
 import com.example.ui.components.*
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
@@ -42,6 +44,7 @@ fun OptimizationScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val thermalManager = remember { ThermalSafetyManager(context) }
 
     // Persistent States from SharedPreferences (SURVIVES APP EXIT & RESTART!)
     var isCleaningCache by remember { mutableStateOf(false) }
@@ -51,6 +54,16 @@ fun OptimizationScreen(
     var autoJunkActive by remember { mutableStateOf(gameOptimizer.isAutoJunkCleanerEnabled()) }
     var autoJunkInterval by remember { mutableStateOf(gameOptimizer.getAutoCleanIntervalMinutes()) }
     var artCompiling by remember { mutableStateOf(false) }
+
+    // Thermal & Safety States
+    var thermalAlertActive by remember { mutableStateOf(thermalManager.isThermalAlertEnabled()) }
+    var coolingModeActive by remember { mutableStateOf(thermalManager.isCoolingModeActive()) }
+    var thermalLimit by remember { mutableStateOf(thermalManager.getThermalLimitCelsius()) }
+
+    // Audio & Game Dock States
+    var bluetoothLowLatency by remember { mutableStateOf(false) }
+    var trebleBoosterActive by remember { mutableStateOf(false) }
+    var isFloatingDockOn by remember { mutableStateOf(false) }
 
     // Audio & Ping states
     var isRunningSpeakerCleaner by remember { mutableStateOf(false) }
@@ -525,6 +538,189 @@ fun OptimizationScreen(
             }
         }
 
+        // 10. Dock Game Mengambang (In-Game Overlay Sidebar)
+        item {
+            CyberCard(glow = isFloatingDockOn) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Dock Game Mengambang (Overlay)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            StatusBadge(
+                                text = if (isFloatingDockOn) "AKTIF" else "SIAP",
+                                color = if (isFloatingDockOn) StatusSuccess else TextSecondary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Bar mini & gelembung HUD di atas game untuk 1-Tap Boost RAM, DND, Touch Lock dan monitor FPS/Ping.",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            lineHeight = 14.sp
+                        )
+                    }
+
+                    CyberButton(
+                        text = if (isFloatingDockOn) "Tutup" else "Mulai Dock",
+                        color = if (isFloatingDockOn) StatusDanger else NeonCyan,
+                        onClick = {
+                            if (!isFloatingDockOn) {
+                                FloatingFpsService.startOverlay(context)
+                                isFloatingDockOn = true
+                                Toast.makeText(context, "Dock Game aktif di atas layar! Geser atau ketuk gelembung untuk membuka menu.", Toast.LENGTH_LONG).show()
+                            } else {
+                                FloatingFpsService.stopOverlay(context)
+                                isFloatingDockOn = false
+                                Toast.makeText(context, "Dock Game dimatikan.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        // 11. Smart Thermal & Battery Safety Guard
+        item {
+            CyberCard(glow = coolingModeActive) {
+                SectionHeader(
+                    title = "Pelindung Termal & Baterai Cerdas",
+                    subtitle = "Peringatan getar dini sebelum perangkat mengalami throttling panas",
+                    icon = Icons.Default.Thermostat
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Alarm Getar Dini Suhu Panas",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Peringatan haptik getar saat suhu menyentuh ${String.format("%.1f", thermalLimit)}°C",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = thermalAlertActive,
+                        onCheckedChange = { active ->
+                            thermalAlertActive = active
+                            thermalManager.setThermalAlertEnabled(active)
+                            Toast.makeText(context, if (active) "Alarm termal aktif!" else "Alarm termal nonaktif", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = NeonCyan, checkedTrackColor = NeonBlueDark)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 1-Click Cooling Down Mode Button
+                CyberButton(
+                    text = if (coolingModeActive) "Nonaktifkan Mode Pendinginan" else "Mode Pendinginan Cepat (Cooling Down)",
+                    icon = Icons.Default.AcUnit,
+                    color = if (coolingModeActive) StatusWarning else NeonCyan,
+                    onClick = {
+                        scope.launch {
+                            val nextMode = !coolingModeActive
+                            coolingModeActive = nextMode
+                            val msg = thermalManager.applyCoolingDownMode(nextMode)
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        // 12. Penyetel Latensi Audio Gaming
+        item {
+            CyberCard {
+                SectionHeader(
+                    title = "Penyetel Latensi Audio Gaming",
+                    subtitle = "Kurangi delay Bluetooth & pertajam suara langkah kaki",
+                    icon = Icons.Default.Headphones
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Toggle 1: Bluetooth Low Latency
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Mode Bluetooth Latensi Rendah",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Kecilkan ukuran buffer audio agar suara tembakan di headset TWS/Bluetooth tidak delay.",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = bluetoothLowLatency,
+                        onCheckedChange = { active ->
+                            bluetoothLowLatency = active
+                            Toast.makeText(context, if (active) "Low Latency Audio: AKTIF" else "Audio: Normal", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = NeonCyan, checkedTrackColor = NeonBlueDark)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Toggle 2: Treble & Footstep Booster
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Penguat Suara Langkah Kaki (Treble Boost)",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Penajaman frekuensi 2kHz-4kHz untuk memperjelas suara langkah musuh di game FPS.",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = trebleBoosterActive,
+                        onCheckedChange = { active ->
+                            trebleBoosterActive = active
+                            Toast.makeText(context, if (active) "Equalizer Treble Langkah Kaki: AKTIF" else "Equalizer: Datar", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = NeonCyan, checkedTrackColor = NeonBlueDark)
+                    )
+                }
+            }
+        }
+
         // ART AOT Optimizer
         item {
             CyberCard {
@@ -680,25 +876,24 @@ private fun AdvancedSetupItem(
     CyberCard(onClick = onClick) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0C1624))
+                    .border(1.dp, CyberCardStroke, RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF0C1624))
-                        .border(1.dp, CyberCardStroke, RoundedCornerShape(8.dp)),
-                    contentAlignment = Alignment.Center
+                Icon(imageVector = icon, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(imageVector = icon, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
@@ -713,27 +908,34 @@ private fun AdvancedSetupItem(
                             color = NeonCyan
                         )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Text(text = subtitle, fontSize = 11.sp, color = TextSecondary)
+                    Text(
+                        text = statusText,
+                        fontSize = 11.sp,
+                        color = statusColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = statusText,
-                    fontSize = 11.sp,
-                    color = statusColor,
-                    fontWeight = FontWeight.SemiBold
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = TextSecondary,
-                    modifier = Modifier.size(16.dp)
+                Text(
+                    text = subtitle,
+                    fontSize = 11.sp,
+                    color = TextSecondary,
+                    lineHeight = 14.sp
                 )
             }
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

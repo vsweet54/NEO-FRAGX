@@ -284,17 +284,24 @@ private fun InfoDataRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, fontSize = 12.sp, color = TextSecondary)
+        Text(
+            text = label,
+            modifier = Modifier.weight(0.44f),
+            fontSize = 12.sp,
+            color = TextSecondary
+        )
         Text(
             text = value,
+            modifier = Modifier.weight(0.56f),
             fontSize = 12.sp,
             color = TextPrimary,
             fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace
+            fontFamily = FontFamily.Monospace,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End
         )
     }
 }

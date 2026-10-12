@@ -29,9 +29,11 @@ import com.example.data.model.RootShizukuStatus
 import com.example.data.model.SystemTelemetry
 import com.example.tuner.BenchmarkEngine
 import com.example.tuner.GameOptimizer
+import com.example.tuner.NetworkLatencyOptimizer
 import com.example.tuner.RenderingEngineDetector
 import com.example.tuner.ShellExecutor
 import com.example.tuner.SystemTelemetryManager
+import com.example.tuner.ThermalSafetyManager
 import com.example.ui.components.StatusBadge
 import com.example.ui.screens.*
 import com.example.ui.theme.*
@@ -50,12 +52,14 @@ enum class TuningSubTab(val label: String) {
     GRAPHICS("Grafis"),
     FPS("FPS & Frame"),
     CPU_GPU("CPU & GPU"),
-    OPTIMIZATION("Optimasi")
+    OPTIMIZATION("Optimasi"),
+    NETWORK("Jaringan")
 }
 
 enum class ToolsSubTab(val label: String) {
     ROOT_SHIZUKU("Root / Shizuku"),
     BENCHMARK("Benchmark"),
+    CALIBRATION("Sentuh & Hz"),
     SETTINGS("Alat & Log")
 }
 
@@ -71,6 +75,8 @@ fun NeoFragxApp() {
     val shellExecutor = remember { ShellExecutor(context) }
     val gameOptimizer = remember { GameOptimizer(context) }
     val benchmarkEngine = remember { BenchmarkEngine() }
+    val networkOptimizer = remember { NetworkLatencyOptimizer(context) }
+    val thermalManager = remember { ThermalSafetyManager(context) }
 
     // Live States
     var telemetry by remember { mutableStateOf(SystemTelemetry()) }
@@ -330,6 +336,7 @@ fun NeoFragxApp() {
                                     toolsSubTab = ToolsSubTab.ROOT_SHIZUKU
                                 }
                             )
+                            TuningSubTab.NETWORK -> NetworkStabilizerScreen(networkOptimizer = networkOptimizer)
                         }
                     }
                 }
@@ -358,9 +365,10 @@ fun NeoFragxApp() {
                                 ) {
                                     Text(
                                         text = sub.label,
-                                        fontSize = 11.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSubSelected) NeonCyan else TextSecondary
+                                        color = if (isSubSelected) NeonCyan else TextSecondary,
+                                        maxLines = 1
                                     )
                                 }
                             }
@@ -369,6 +377,7 @@ fun NeoFragxApp() {
                         when (toolsSubTab) {
                             ToolsSubTab.ROOT_SHIZUKU -> RootShizukuScreen(rootStatus = rootStatus, shellExecutor = shellExecutor, gameOptimizer = gameOptimizer)
                             ToolsSubTab.BENCHMARK -> BenchmarkScreen(telemetry = telemetry, benchmarkEngine = benchmarkEngine)
+                            ToolsSubTab.CALIBRATION -> TouchCalibrationScreen()
                             ToolsSubTab.SETTINGS -> ToolsScreen(gameOptimizer = gameOptimizer)
                         }
                     }

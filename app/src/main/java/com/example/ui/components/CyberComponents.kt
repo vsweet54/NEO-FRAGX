@@ -148,15 +148,18 @@ fun SectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (icon != null) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(34.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(NeonCyan.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
@@ -170,24 +173,31 @@ fun SectionHeader(
                 }
                 Spacer(modifier = Modifier.width(10.dp))
             }
-            Column {
+            Column(modifier = Modifier.padding(end = 6.dp)) {
                 Text(
                     text = title,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (subtitle != null) {
                     Text(
                         text = subtitle,
                         fontSize = 11.sp,
-                        color = TextSecondary
+                        color = TextSecondary,
+                        lineHeight = 14.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
         }
         if (action != null) {
-            action()
+            Box(contentAlignment = Alignment.CenterEnd) {
+                action()
+            }
         }
     }
 }

@@ -78,7 +78,7 @@ fun ToolsScreen(
                 ) {
                     // Backup
                     CyberButton(
-                        text = "Cadangkan (Backup)",
+                        text = "Cadangkan",
                         icon = Icons.Default.CloudUpload,
                         onClick = {
                             val backupJson = "{\"neo_version\":\"3.0\",\"export_time\":${System.currentTimeMillis()},\"engine\":\"NEO_FRAGX\"}"
@@ -93,7 +93,7 @@ fun ToolsScreen(
 
                     // Restore
                     CyberButton(
-                        text = "Pulihkan (Restore)",
+                        text = "Pulihkan",
                         icon = Icons.Default.CloudDownload,
                         onClick = { showRestoreDialog = true },
                         modifier = Modifier.weight(1f),
