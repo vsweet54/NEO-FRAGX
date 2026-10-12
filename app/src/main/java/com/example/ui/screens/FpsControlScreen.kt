@@ -37,7 +37,11 @@ fun FpsControlScreen() {
     val context = LocalContext.current
     var targetFpsCap by remember { mutableStateOf(120) }
     var selectedRefreshRate by remember { mutableStateOf(120) }
-    var isOverlayEnabled by remember { mutableStateOf(false) }
+    var isOverlayEnabled by remember { mutableStateOf(FloatingFpsService.isRunning) }
+
+    LaunchedEffect(Unit) {
+        isOverlayEnabled = FloatingFpsService.isRunning
+    }
 
     // Real-time Frame Pacing Jitter Measurement
     var currentJitterMs by remember { mutableStateOf(0.8f) }
@@ -240,16 +244,9 @@ fun FpsControlScreen() {
                         checked = isOverlayEnabled,
                         onCheckedChange = { enable ->
                             if (enable) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-                                    Toast.makeText(context, "Izin Tampilkan di Atas Aplikasi Lain Diperlukan", Toast.LENGTH_LONG).show()
-                                    val intent = Intent(
-                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        Uri.parse("package:${context.packageName}")
-                                    )
-                                    context.startActivity(intent)
-                                } else {
-                                    isOverlayEnabled = true
-                                    FloatingFpsService.startOverlay(context)
+                                val started = FloatingFpsService.startOverlay(context)
+                                isOverlayEnabled = started
+                                if (started) {
                                     Toast.makeText(context, "Overlay FPS diaktifkan di atas layar game!", Toast.LENGTH_SHORT).show()
                                 }
                             } else {

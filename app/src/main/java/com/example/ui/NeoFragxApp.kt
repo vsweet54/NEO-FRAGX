@@ -6,12 +6,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,17 +26,20 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import com.example.R
 import com.example.data.model.RenderingEngineInfo
 import com.example.data.model.RootShizukuStatus
 import com.example.data.model.SystemTelemetry
 import com.example.tuner.BenchmarkEngine
+import com.example.tuner.FloatingFpsService
 import com.example.tuner.GameOptimizer
 import com.example.tuner.NetworkLatencyOptimizer
 import com.example.tuner.RenderingEngineDetector
 import com.example.tuner.ShellExecutor
 import com.example.tuner.SystemTelemetryManager
 import com.example.tuner.ThermalSafetyManager
+import com.example.ui.components.InAppFloatingDock
 import com.example.ui.components.StatusBadge
 import com.example.ui.screens.*
 import com.example.ui.theme.*
@@ -85,17 +91,52 @@ fun NeoFragxApp() {
 
     // Navigation States
     var currentTab by remember { mutableStateOf(MainNavTab.DASHBOARD) }
-    var tuningSubTab by remember { mutableStateOf(TuningSubTab.GRAPHICS) }
-    var toolsSubTab by remember { mutableStateOf(ToolsSubTab.ROOT_SHIZUKU) }
+    var isDockVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (FloatingFpsService.isRunning) {
+            isDockVisible = true
+        }
+    }
+
+    val tuningTabs = remember { TuningSubTab.values() }
+    val tuningPagerState = rememberPagerState(
+        initialPage = TuningSubTab.GRAPHICS.ordinal,
+        pageCount = { tuningTabs.size }
+    )
+    val toolsTabs = remember { ToolsSubTab.values() }
+    val toolsPagerState = rememberPagerState(
+        initialPage = ToolsSubTab.ROOT_SHIZUKU.ordinal,
+        pageCount = { toolsTabs.size }
+    )
+
+    // Helper functions to jump subtabs smoothly
+    fun navigateTuningTo(tab: TuningSubTab) {
+        scope.launch {
+            tuningPagerState.animateScrollToPage(tab.ordinal)
+        }
+    }
+
+    fun navigateToolsTo(tab: ToolsSubTab) {
+        scope.launch {
+            toolsPagerState.animateScrollToPage(tab.ordinal)
+        }
+    }
 
     // Periodic telemetry update loop
     LaunchedEffect(Unit) {
         scope.launch {
-            rootStatus = shellExecutor.checkRootAndShizuku()
-            renderingInfo = renderingDetector.detectRenderingEngine()
+            try {
+                rootStatus = shellExecutor.checkRootAndShizuku()
+            } catch (_: Exception) {}
+            try {
+                renderingInfo = renderingDetector.detectRenderingEngine()
+            } catch (_: Exception) {}
         }
         while (true) {
-            telemetry = telemetryManager.getTelemetry()
+            try {
+                telemetry = telemetryManager.getTelemetry()
+            } catch (_: Exception) {}
             delay(1500)
         }
     }
@@ -155,6 +196,24 @@ fun NeoFragxApp() {
                     }
                 },
                 actions = {
+                    // Floating Game Dock quick launcher
+                    IconButton(
+                        onClick = {
+                            isDockVisible = !isDockVisible
+                            if (isDockVisible) {
+                                Toast.makeText(context, "Game Dock aktif! Geser atau ketuk gelembung untuk membuka menu.", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Widgets,
+                            contentDescription = "Toggle Game Dock",
+                            tint = if (isDockVisible) NeonCyan else TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                     // Root & Thermal Status indicators
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -241,38 +300,38 @@ fun NeoFragxApp() {
                         },
                         onNavigateToArtRuntime = {
                             currentTab = MainNavTab.TUNING
-                            tuningSubTab = TuningSubTab.OPTIMIZATION
+                            navigateTuningTo(TuningSubTab.OPTIMIZATION)
                         },
                         onNavigateToGameDriver = {
                             currentTab = MainNavTab.TUNING
-                            tuningSubTab = TuningSubTab.GRAPHICS
+                            navigateTuningTo(TuningSubTab.GRAPHICS)
                         },
                         onNavigateToRendering = {
                             currentTab = MainNavTab.RENDERING
                         },
                         onNavigateToCpuBoost = {
                             currentTab = MainNavTab.TUNING
-                            tuningSubTab = TuningSubTab.CPU_GPU
+                            navigateTuningTo(TuningSubTab.CPU_GPU)
                         },
                         onNavigateToBatteryTuning = {
                             currentTab = MainNavTab.TUNING
-                            tuningSubTab = TuningSubTab.OPTIMIZATION
+                            navigateTuningTo(TuningSubTab.OPTIMIZATION)
                         },
                         onNavigateToFpsOverlay = {
                             currentTab = MainNavTab.TUNING
-                            tuningSubTab = TuningSubTab.FPS
+                            navigateTuningTo(TuningSubTab.FPS)
                         },
                         onNavigateToAddons = {
                             currentTab = MainNavTab.TOOLS
-                            toolsSubTab = ToolsSubTab.ROOT_SHIZUKU
+                            navigateToolsTo(ToolsSubTab.ROOT_SHIZUKU)
                         },
                         onNavigateToSystemLab = {
                             currentTab = MainNavTab.TUNING
-                            tuningSubTab = TuningSubTab.OPTIMIZATION
+                            navigateTuningTo(TuningSubTab.OPTIMIZATION)
                         },
                         onNavigateToRootTerminal = {
                             currentTab = MainNavTab.TOOLS
-                            toolsSubTab = ToolsSubTab.ROOT_SHIZUKU
+                            navigateToolsTo(ToolsSubTab.ROOT_SHIZUKU)
                         }
                     )
                 }
@@ -293,95 +352,138 @@ fun NeoFragxApp() {
                 }
                 MainNavTab.TUNING -> {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Sub-navigation bar for Tuning
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(CyberCard)
-                                .border(1.dp, CyberCardStroke, RoundedCornerShape(10.dp))
-                                .padding(4.dp)
-                        ) {
-                            TuningSubTab.values().forEach { sub ->
-                                val isSubSelected = tuningSubTab == sub
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isSubSelected) NeonCyan.copy(alpha = 0.18f) else Color.Transparent)
-                                        .clickable { tuningSubTab = sub }
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = sub.label,
-                                        fontSize = 11.sp,
-                                        fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSubSelected) NeonCyan else TextSecondary
+                        // Sub-navigation bar for Tuning with smooth horizontal scrolling & glowing indicator
+                        ScrollableTabRow(
+                            selectedTabIndex = tuningPagerState.currentPage,
+                            containerColor = CyberDark,
+                            contentColor = NeonCyan,
+                            edgePadding = 16.dp,
+                            indicator = { tabPositions ->
+                                if (tuningPagerState.currentPage < tabPositions.size) {
+                                    TabRowDefaults.SecondaryIndicator(
+                                        modifier = Modifier.tabIndicatorOffset(tabPositions[tuningPagerState.currentPage]),
+                                        color = NeonCyan,
+                                        height = 3.dp
                                     )
                                 }
+                            },
+                            divider = {
+                                HorizontalDivider(color = CyberCardStroke, thickness = 1.dp)
+                            }
+                        ) {
+                            tuningTabs.forEachIndexed { index, sub ->
+                                val isSubSelected = tuningPagerState.currentPage == index
+                                Tab(
+                                    selected = isSubSelected,
+                                    onClick = {
+                                        scope.launch {
+                                            tuningPagerState.animateScrollToPage(index)
+                                        }
+                                    },
+                                    text = {
+                                        Text(
+                                            text = sub.label,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSubSelected) NeonCyan else TextSecondary
+                                        )
+                                    }
+                                )
                             }
                         }
 
-                        when (tuningSubTab) {
-                            TuningSubTab.GRAPHICS -> GraphicsScreen(gameOptimizer = gameOptimizer)
-                            TuningSubTab.FPS -> FpsControlScreen()
-                            TuningSubTab.CPU_GPU -> CpuGpuScreen(telemetry = telemetry, rootStatus = rootStatus, shellExecutor = shellExecutor)
-                            TuningSubTab.OPTIMIZATION -> OptimizationScreen(
-                                gameOptimizer = gameOptimizer,
-                                telemetry = telemetry,
-                                onNavigateToTerminal = {
-                                    currentTab = MainNavTab.TOOLS
-                                    toolsSubTab = ToolsSubTab.ROOT_SHIZUKU
-                                }
-                            )
-                            TuningSubTab.NETWORK -> NetworkStabilizerScreen(networkOptimizer = networkOptimizer)
+                        // HorizontalPager for swipeable navigation between tuning subtabs (slide left/right to navigate)
+                        HorizontalPager(
+                            state = tuningPagerState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) { page ->
+                            when (tuningTabs[page]) {
+                                TuningSubTab.GRAPHICS -> GraphicsScreen(gameOptimizer = gameOptimizer)
+                                TuningSubTab.FPS -> FpsControlScreen()
+                                TuningSubTab.CPU_GPU -> CpuGpuScreen(telemetry = telemetry, rootStatus = rootStatus, shellExecutor = shellExecutor)
+                                TuningSubTab.OPTIMIZATION -> OptimizationScreen(
+                                    gameOptimizer = gameOptimizer,
+                                    telemetry = telemetry,
+                                    onNavigateToTerminal = {
+                                        currentTab = MainNavTab.TOOLS
+                                        navigateToolsTo(ToolsSubTab.ROOT_SHIZUKU)
+                                    }
+                                )
+                                TuningSubTab.NETWORK -> NetworkStabilizerScreen(networkOptimizer = networkOptimizer)
+                            }
                         }
                     }
                 }
                 MainNavTab.TOOLS -> {
                     Column(modifier = Modifier.fillMaxSize()) {
                         // Sub-navigation bar for Tools & Root
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(CyberCard)
-                                .border(1.dp, CyberCardStroke, RoundedCornerShape(10.dp))
-                                .padding(4.dp)
-                        ) {
-                            ToolsSubTab.values().forEach { sub ->
-                                val isSubSelected = toolsSubTab == sub
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isSubSelected) NeonCyan.copy(alpha = 0.18f) else Color.Transparent)
-                                        .clickable { toolsSubTab = sub }
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = sub.label,
-                                        fontSize = 10.sp,
-                                        fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSubSelected) NeonCyan else TextSecondary,
-                                        maxLines = 1
+                        ScrollableTabRow(
+                            selectedTabIndex = toolsPagerState.currentPage,
+                            containerColor = CyberDark,
+                            contentColor = NeonCyan,
+                            edgePadding = 16.dp,
+                            indicator = { tabPositions ->
+                                if (toolsPagerState.currentPage < tabPositions.size) {
+                                    TabRowDefaults.SecondaryIndicator(
+                                        modifier = Modifier.tabIndicatorOffset(tabPositions[toolsPagerState.currentPage]),
+                                        color = NeonCyan,
+                                        height = 3.dp
                                     )
                                 }
+                            },
+                            divider = {
+                                HorizontalDivider(color = CyberCardStroke, thickness = 1.dp)
+                            }
+                        ) {
+                            toolsTabs.forEachIndexed { index, sub ->
+                                val isSubSelected = toolsPagerState.currentPage == index
+                                Tab(
+                                    selected = isSubSelected,
+                                    onClick = {
+                                        scope.launch {
+                                            toolsPagerState.animateScrollToPage(index)
+                                        }
+                                    },
+                                    text = {
+                                        Text(
+                                            text = sub.label,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSubSelected) NeonCyan else TextSecondary
+                                        )
+                                    }
+                                )
                             }
                         }
 
-                        when (toolsSubTab) {
-                            ToolsSubTab.ROOT_SHIZUKU -> RootShizukuScreen(rootStatus = rootStatus, shellExecutor = shellExecutor, gameOptimizer = gameOptimizer)
-                            ToolsSubTab.BENCHMARK -> BenchmarkScreen(telemetry = telemetry, benchmarkEngine = benchmarkEngine)
-                            ToolsSubTab.CALIBRATION -> TouchCalibrationScreen()
-                            ToolsSubTab.SETTINGS -> ToolsScreen(gameOptimizer = gameOptimizer)
+                        // HorizontalPager for swipeable navigation between tools subtabs
+                        HorizontalPager(
+                            state = toolsPagerState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) { page ->
+                            when (toolsTabs[page]) {
+                                ToolsSubTab.ROOT_SHIZUKU -> RootShizukuScreen(rootStatus = rootStatus, shellExecutor = shellExecutor, gameOptimizer = gameOptimizer)
+                                ToolsSubTab.BENCHMARK -> BenchmarkScreen(telemetry = telemetry, benchmarkEngine = benchmarkEngine)
+                                ToolsSubTab.CALIBRATION -> TouchCalibrationScreen()
+                                ToolsSubTab.SETTINGS -> ToolsScreen(gameOptimizer = gameOptimizer)
+                            }
                         }
                     }
                 }
+            }
+
+            // In-App Draggable Floating Game Dock Overlay
+            if (isDockVisible) {
+                InAppFloatingDock(
+                    telemetry = telemetry,
+                    gameOptimizer = gameOptimizer,
+                    networkOptimizer = networkOptimizer,
+                    onClose = { isDockVisible = false }
+                )
             }
         }
     }

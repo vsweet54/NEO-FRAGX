@@ -3,7 +3,14 @@ package com.example.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,6 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -28,11 +38,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.GameProfile
+import com.example.tuner.BackupManager
 import com.example.tuner.FloatingFpsService
 import com.example.tuner.GameOptimizer
 import com.example.ui.components.*
 import com.example.ui.theme.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun GameManagerScreen(
@@ -44,19 +57,49 @@ fun GameManagerScreen(
     var isLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
 
+    // Auto Feature states
+    var isAutoDetectGame by remember { mutableStateOf(gameOptimizer.isAutoDetectGameEnabled()) }
+    var isAutoLaunchAutoConfig by remember { mutableStateOf(gameOptimizer.isAutoLaunchAutoConfigEnabled()) }
+    var isAutoStartOnBoot by remember { mutableStateOf(gameOptimizer.isAutoStartOnBootEnabled()) }
+
     // Dialog states
     var selectedGameForEdit by remember { mutableStateOf<GameProfile?>(null) }
     var showResolutionSubDialog by remember { mutableStateOf(false) }
     var showAddGameDialog by remember { mutableStateOf(false) }
     var showImportPresetDialog by remember { mutableStateOf(false) }
     var importPresetInput by remember { mutableStateOf("") }
-    var isFloatingDockRunning by remember { mutableStateOf(false) }
+    var isFloatingDockRunning by remember { mutableStateOf(FloatingFpsService.isRunning) }
+
+    LaunchedEffect(Unit) {
+        isFloatingDockRunning = FloatingFpsService.isRunning
+    }
 
     fun refreshGames() {
         scope.launch {
             isLoading = true
             games = gameOptimizer.getInstalledGames()
             isLoading = false
+        }
+    }
+
+    val importPresetLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    if (!content.isNullOrEmpty()) {
+                        val count = BackupManager.importGamePresets(gameOptimizer, content, games)
+                        refreshGames()
+                        Toast.makeText(context, "Berhasil mengimpor $count preset game dari file!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(context, "File kosong!", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Gagal membaca file: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -172,6 +215,102 @@ fun GameManagerScreen(
             }
         }
 
+        // Fitur Otomatisasi (Auto Engine) Card
+        item {
+            CyberCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0C1726))
+                            .border(1.dp, NeonCyan, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(imageVector = Icons.Default.AutoMode, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Fitur Otomatisasi (Auto Engine)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(NeonCyan.copy(alpha = 0.15f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (isAutoDetectGame) "AKTIF" else "STANDBY",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isAutoDetectGame) NeonCyan else StatusWarning
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Deteksi otomatis peluncuran game, auto profil & start saat boot",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 1. Auto Detect Game
+                AutoToggleRow(
+                    title = "Auto Detect Game",
+                    description = "NEO FRAGX mendeteksi game yang mulai berjalan, lalu menerapkan konfigurasi yang didukung secara otomatis.",
+                    icon = Icons.Default.Radar,
+                    checked = isAutoDetectGame,
+                    onCheckedChange = {
+                        isAutoDetectGame = it
+                        gameOptimizer.setAutoDetectGameEnabled(it)
+                        Toast.makeText(context, if (it) "Auto Detect Game diaktifkan" else "Auto Detect Game dinonaktifkan", Toast.LENGTH_SHORT).show()
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 2. Auto Launch + Auto Config
+                AutoToggleRow(
+                    title = "Auto Launch + Auto Config",
+                    description = "Pengguna membuka game dari ikon biasa, kemudian NEO FRAGX mengaktifkan profil game secara otomatis.",
+                    icon = Icons.Default.RocketLaunch,
+                    checked = isAutoLaunchAutoConfig,
+                    onCheckedChange = {
+                        isAutoLaunchAutoConfig = it
+                        gameOptimizer.setAutoLaunchAutoConfigEnabled(it)
+                        Toast.makeText(context, if (it) "Auto Launch + Config diaktifkan" else "Auto Launch + Config dinonaktifkan", Toast.LENGTH_SHORT).show()
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 3. Auto Start saat HP Menyala
+                AutoToggleRow(
+                    title = "Auto Start saat HP Menyala",
+                    description = "NEO FRAGX memulai layanan pemantauan setelah boot jika Android mengizinkannya.",
+                    icon = Icons.Default.PowerSettingsNew,
+                    checked = isAutoStartOnBoot,
+                    onCheckedChange = {
+                        isAutoStartOnBoot = it
+                        gameOptimizer.setAutoStartOnBootEnabled(it)
+                        Toast.makeText(context, if (it) "Auto Start saat HP Menyala diaktifkan" else "Auto Start saat Boot dinonaktifkan", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+        }
+
         // Floating In-Game Game Dock Overlay (Sidebar) Card
         item {
             CyberCard(glow = isFloatingDockRunning) {
@@ -223,9 +362,11 @@ fun GameManagerScreen(
                         color = if (isFloatingDockRunning) StatusDanger else NeonCyan,
                         onClick = {
                             if (!isFloatingDockRunning) {
-                                FloatingFpsService.startOverlay(context)
-                                isFloatingDockRunning = true
-                                Toast.makeText(context, "Game Dock mengambang aktif! Ketuk gelembung untuk membuka sidebar.", Toast.LENGTH_LONG).show()
+                                val started = FloatingFpsService.startOverlay(context)
+                                isFloatingDockRunning = started
+                                if (started) {
+                                    Toast.makeText(context, "Game Dock mengambang aktif! Ketuk gelembung untuk membuka sidebar.", Toast.LENGTH_LONG).show()
+                                }
                             } else {
                                 FloatingFpsService.stopOverlay(context)
                                 isFloatingDockRunning = false
@@ -305,14 +446,20 @@ fun GameManagerScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     CyberButton(
-                        text = "Ekspor Preset (JSON)",
+                        text = "Ekspor Preset",
                         icon = Icons.Default.Share,
                         modifier = Modifier.weight(1f),
+                        fontSize = 11.5.sp,
                         onClick = {
-                            val presetJson = "{\"neo_profiles_count\":${games.size},\"profiles\":[{\"engine\":\"NEO_FRAGX\",\"fps\":120,\"touch\":\"extreme\"}]}"
+                            val presetJson = BackupManager.createGamePresetsJson(games)
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("NEO Game Preset", presetJson))
-                            Toast.makeText(context, "Kode Preset JSON disalin ke Clipboard!", Toast.LENGTH_SHORT).show()
+                            val (saved, path) = BackupManager.saveToDownloads(context, "neo_game_presets.json", presetJson)
+                            if (saved) {
+                                Toast.makeText(context, "Tersimpan di $path & disalin ke Clipboard!", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "Preset disalin ke Clipboard! ($path)", Toast.LENGTH_LONG).show()
+                            }
                         }
                     )
 
@@ -320,8 +467,29 @@ fun GameManagerScreen(
                         text = "Impor Preset",
                         icon = Icons.Default.Download,
                         modifier = Modifier.weight(1f),
+                        fontSize = 11.5.sp,
                         color = NeonBlue,
                         onClick = { showImportPresetDialog = true }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF0A1422))
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(imageVector = Icons.Default.Folder, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Folder Penyimpanan: Download/NEO FRAGX/neo_game_presets.json",
+                        fontSize = 10.sp,
+                        color = TextSecondary,
+                        fontFamily = FontFamily.Monospace
                     )
                 }
             }
@@ -467,18 +635,57 @@ fun GameManagerScreen(
                 }
             },
             title = {
-                Text(
-                    text = currentGame.appName,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AppIconImage(
+                        packageName = currentGame.packageName,
+                        modifier = Modifier.size(36.dp),
+                        isGameCategory = currentGame.isGameCategory,
+                        isTuned = currentGame.isTuned
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = currentGame.appName,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = currentGame.packageName,
+                            fontSize = 10.sp,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
             },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    CyberButton(
+                        text = "🚀 Buka Game & Auto Config",
+                        icon = Icons.Default.RocketLaunch,
+                        onClick = {
+                            scope.launch {
+                                gameOptimizer.saveProfile(currentGame)
+                                gameOptimizer.launchGameWithAutoConfig(currentGame.packageName)
+                                selectedGameForEdit = null
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
                     // Option 1: Runtime Compiler
                     TweakOptionItem(
                         title = "Runtime Compiler",
@@ -637,58 +844,191 @@ fun GameManagerScreen(
         )
     }
 
-    // Add Game Dialog
+    // Add Game Dialog (With Installed Apps Picker & Real Logos)
     if (showAddGameDialog) {
+        var selectedTab by remember { mutableStateOf(0) }
+        var appFilterQuery by remember { mutableStateOf("") }
         var newPkgInput by remember { mutableStateOf("") }
         var newNameInput by remember { mutableStateOf("") }
+        var installedList by remember { mutableStateOf<List<Triple<String, String, Boolean>>>(emptyList()) }
+        var isAppsLoading by remember { mutableStateOf(true) }
+
+        LaunchedEffect(Unit) {
+            isAppsLoading = true
+            installedList = gameOptimizer.getAllInstalledApplicationsList()
+            isAppsLoading = false
+        }
+
+        val filteredInstalled = installedList.filter {
+            it.second.contains(appFilterQuery, ignoreCase = true) ||
+            it.first.contains(appFilterQuery, ignoreCase = true)
+        }
 
         AlertDialog(
             onDismissRequest = { showAddGameDialog = false },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (newPkgInput.isNotBlank()) {
-                            val custom = GameProfile(
-                                packageName = newPkgInput.trim(),
-                                appName = newNameInput.ifBlank { newPkgInput.trim() },
-                                isGameCategory = true,
-                                isTuned = true
-                            )
-                            scope.launch {
-                                gameOptimizer.saveProfile(custom)
-                                showAddGameDialog = false
-                                refreshGames()
-                                Toast.makeText(context, "Game ditambahkan!", Toast.LENGTH_SHORT).show()
+                if (selectedTab == 1) {
+                    TextButton(
+                        onClick = {
+                            if (newPkgInput.isNotBlank()) {
+                                val custom = GameProfile(
+                                    packageName = newPkgInput.trim(),
+                                    appName = newNameInput.ifBlank { newPkgInput.trim() },
+                                    isGameCategory = true,
+                                    isTuned = true
+                                )
+                                scope.launch {
+                                    gameOptimizer.saveProfile(custom)
+                                    showAddGameDialog = false
+                                    refreshGames()
+                                    Toast.makeText(context, "Game ditambahkan!", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
+                    ) {
+                        Text("Simpan Manual", color = NeonCyan, fontWeight = FontWeight.Bold)
                     }
-                ) {
-                    Text("Simpan", color = NeonCyan)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddGameDialog = false }) {
-                    Text("Batal", color = TextSecondary)
+                    Text("Tutup", color = TextSecondary)
                 }
             },
-            title = { Text("Tambah Game Manual", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            title = {
+                Text("Tambah Game ke NEO FRAGX", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Masukkan Package Name game yang ingin ditambahkan:", fontSize = 12.sp, color = TextSecondary)
-                    OutlinedTextField(
-                        value = newPkgInput,
-                        onValueChange = { newPkgInput = it },
-                        placeholder = { Text("com.dts.freefireth", fontSize = 12.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = newNameInput,
-                        onValueChange = { newNameInput = it },
-                        placeholder = { Text("Nama Game (Opsional)", fontSize = 12.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Tab Selector
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF09111C))
+                            .padding(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (selectedTab == 0) NeonCyan.copy(alpha = 0.2f) else Color.Transparent)
+                                .clickable { selectedTab = 0 }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Aplikasi Terpasang",
+                                fontSize = 11.5.sp,
+                                fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 0) NeonCyan else TextSecondary
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (selectedTab == 1) NeonCyan.copy(alpha = 0.2f) else Color.Transparent)
+                                .clickable { selectedTab = 1 }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Input Manual",
+                                fontSize = 11.5.sp,
+                                fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 1) NeonCyan else TextSecondary
+                            )
+                        }
+                    }
+
+                    if (selectedTab == 0) {
+                        OutlinedTextField(
+                            value = appFilterQuery,
+                            onValueChange = { appFilterQuery = it },
+                            placeholder = { Text("Cari aplikasi / game...", fontSize = 11.5.sp) },
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp)) },
+                            singleLine = true
+                        )
+
+                        if (isAppsLoading) {
+                            Box(modifier = Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = NeonCyan, modifier = Modifier.size(24.dp))
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 280.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(filteredInstalled, key = { it.first }) { (pkg, label, isGame) ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF0C1522))
+                                            .clickable {
+                                                val profile = GameProfile(
+                                                    packageName = pkg,
+                                                    appName = label,
+                                                    isGameCategory = isGame,
+                                                    isTuned = true
+                                                )
+                                                scope.launch {
+                                                    gameOptimizer.saveProfile(profile)
+                                                    showAddGameDialog = false
+                                                    refreshGames()
+                                                    Toast.makeText(context, "$label ditambahkan!", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        AppIconImage(
+                                            packageName = pkg,
+                                            isGameCategory = isGame,
+                                            isTuned = true,
+                                            modifier = Modifier.size(34.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(text = pkg, fontSize = 10.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace)
+                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.AddCircle,
+                                            contentDescription = null,
+                                            tint = NeonCyan,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text("Masukkan Package Name game yang ingin ditambahkan:", fontSize = 12.sp, color = TextSecondary)
+                        OutlinedTextField(
+                            value = newPkgInput,
+                            onValueChange = { newPkgInput = it },
+                            placeholder = { Text("com.dts.freefireth", fontSize = 12.sp) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = newNameInput,
+                            onValueChange = { newNameInput = it },
+                            placeholder = { Text("Nama Game (Opsional)", fontSize = 12.sp) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
                 }
             },
             containerColor = CyberDark
@@ -701,33 +1041,55 @@ fun GameManagerScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showImportPresetDialog = false
-                        Toast.makeText(context, "Preset berhasil diimpor & diterapkan ke semua profil game!", Toast.LENGTH_SHORT).show()
+                        if (importPresetInput.isNotBlank()) {
+                            scope.launch {
+                                val count = BackupManager.importGamePresets(gameOptimizer, importPresetInput, games)
+                                refreshGames()
+                                showImportPresetDialog = false
+                                Toast.makeText(context, "Berhasil mengimpor $count preset game!", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            showImportPresetDialog = false
+                        }
                     }
                 ) {
-                    Text("Impor & Terapkan", color = NeonCyan, fontWeight = FontWeight.Bold)
+                    Text("Terapkan Teks", color = NeonCyan, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showImportPresetDialog = false }) {
-                    Text("Batal", color = TextSecondary)
+                    Text("Tutup", color = TextSecondary)
                 }
             },
             title = {
-                Text("Impor Preset Game (JSON)", color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text("Impor Preset Game", color = TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Tempelkan kode JSON konfigurasi preset game dari teman atau komunitas:",
+                        text = "Impor preset konfigurasi game langsung dari file penyimpanan (.json) atau tempel kode:",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
+
+                    CyberButton(
+                        text = "Pilih File dari Penyimpanan (.json)",
+                        icon = Icons.Default.FolderOpen,
+                        onClick = {
+                            showImportPresetDialog = false
+                            importPresetLauncher.launch("*/*")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = "Atau tempel teks JSON secara manual:", fontSize = 11.sp, color = TextSecondary)
+
                     OutlinedTextField(
                         value = importPresetInput,
                         onValueChange = { importPresetInput = it },
-                        placeholder = { Text("{\"neo_profiles_count\":...}", fontSize = 11.sp) },
-                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        placeholder = { Text("{\"presets\":[...]}", fontSize = 11.sp) },
+                        modifier = Modifier.fillMaxWidth().height(90.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = NeonCyan,
                             unfocusedBorderColor = CyberCardStroke,
@@ -798,21 +1160,13 @@ private fun GameListItem(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF0C1624))
-                        .border(1.dp, if (game.isTuned) NeonCyan else CyberCardStroke, RoundedCornerShape(8.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (game.isGameCategory) Icons.Default.SportsEsports else Icons.Default.Apps,
-                        contentDescription = null,
-                        tint = if (game.isTuned) NeonCyan else TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                // Real Application Logo
+                AppIconImage(
+                    packageName = game.packageName,
+                    isGameCategory = game.isGameCategory,
+                    isTuned = game.isTuned,
+                    modifier = Modifier.size(40.dp)
+                )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
@@ -850,6 +1204,135 @@ private fun GameListItem(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun AppIconImage(
+    packageName: String,
+    modifier: Modifier = Modifier,
+    isGameCategory: Boolean = true,
+    isTuned: Boolean = false
+) {
+    val context = LocalContext.current
+    var bitmap by remember(packageName) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(packageName) {
+        withContext(Dispatchers.IO) {
+            try {
+                val drawable = context.packageManager.getApplicationIcon(packageName)
+                val bmp = drawableToBitmap(drawable)
+                if (bmp != null) {
+                    bitmap = bmp.asImageBitmap()
+                }
+            } catch (_: Exception) {
+                bitmap = null
+            }
+        }
+    }
+
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!,
+            contentDescription = null,
+            modifier = modifier
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, if (isTuned) NeonCyan else CyberCardStroke, RoundedCornerShape(8.dp)),
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        Box(
+            modifier = modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF0C1624))
+                .border(1.dp, if (isTuned) NeonCyan else CyberCardStroke, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (isGameCategory) Icons.Default.SportsEsports else Icons.Default.Apps,
+                contentDescription = null,
+                tint = if (isTuned) NeonCyan else TextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+private fun drawableToBitmap(drawable: Drawable): Bitmap? {
+    if (drawable is BitmapDrawable && drawable.bitmap != null) {
+        return drawable.bitmap
+    }
+    val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 96
+    val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 96
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    drawable.setBounds(0, 0, canvas.width, canvas.height)
+    drawable.draw(canvas)
+    return bitmap
+}
+
+@Composable
+private fun AutoToggleRow(
+    title: String,
+    description: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (checked) NeonCyan.copy(alpha = 0.06f) else Color(0xFF0B121C))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (checked) NeonCyan.copy(alpha = 0.2f) else CyberCardStroke.copy(alpha = 0.3f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (checked) NeonCyan else TextSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (checked) TextPrimary else TextSecondary
+                )
+                Text(
+                    text = description,
+                    fontSize = 10.5.sp,
+                    color = TextSecondary,
+                    lineHeight = 14.sp
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = CyberDark,
+                checkedTrackColor = NeonCyan,
+                uncheckedThumbColor = TextSecondary,
+                uncheckedTrackColor = CyberCardStroke
+            )
+        )
     }
 }
 

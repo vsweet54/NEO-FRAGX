@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.tuner.NeoFragxBackgroundService
 import com.example.tuner.NetworkLatencyOptimizer
 import com.example.ui.components.*
 import com.example.ui.theme.*
@@ -37,6 +38,7 @@ fun NetworkStabilizerScreen(
     var trafficShapingActive by remember { mutableStateOf(networkOptimizer.isTrafficShapingEnabled()) }
     var backgroundRestrictActive by remember { mutableStateOf(networkOptimizer.isBackgroundDataRestricted()) }
     var autoDnsFlushActive by remember { mutableStateOf(networkOptimizer.isAutoDnsFlushEnabled()) }
+    var isBackgroundServiceActive by remember { mutableStateOf(true) }
 
     // Ping states
     var mlbbPing by remember { mutableStateOf<Long?>(null) }
@@ -89,6 +91,7 @@ fun NetworkStabilizerScreen(
                         text = if (isTestingPing) "Menguji..." else "Tes Ulang",
                         icon = Icons.Default.Refresh,
                         enabled = !isTestingPing,
+                        fontSize = 11.sp,
                         onClick = { runPingTest() }
                     )
                 }
@@ -97,17 +100,87 @@ fun NetworkStabilizerScreen(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    PingResultBox(title = "MLBB (SEA)", ping = mlbbPing, modifier = Modifier.weight(1f))
-                    PingResultBox(title = "PUBG Mobile", ping = pubgPing, modifier = Modifier.weight(1f))
+                    PingResultBox(title = "MLBB", ping = mlbbPing, modifier = Modifier.weight(1f))
+                    PingResultBox(title = "PUBG", ping = pubgPing, modifier = Modifier.weight(1f))
                     PingResultBox(title = "Free Fire", ping = ffPing, modifier = Modifier.weight(1f))
-                    PingResultBox(title = "Gateway SG", ping = seaPing, modifier = Modifier.weight(1f))
+                    PingResultBox(title = "SG Gateway", ping = seaPing, modifier = Modifier.weight(1f))
                 }
             }
         }
 
-        // Card 2: 1-Tap Flush DNS Cache & Traffic Shaping
+        // Card 2: Background Latency Optimizer Service (User explicit requirement)
+        item {
+            CyberCard(glow = isBackgroundServiceActive) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF0F1A2A))
+                                .border(1.dp, if (isBackgroundServiceActive) StatusSuccess else NeonCyan, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Sensors,
+                                contentDescription = null,
+                                tint = if (isBackgroundServiceActive) StatusSuccess else NeonCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Layanan Penstabil Ping Background",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                StatusBadge(
+                                    text = if (isBackgroundServiceActive) "AKTIF" else "NONAKTIF",
+                                    color = if (isBackgroundServiceActive) StatusSuccess else TextSecondary
+                                )
+                            }
+                            Text(
+                                text = "Layanan latar belakang: Rutin flush DNS cache & prioritaskan paket game via traffic shaping.",
+                                fontSize = 11.sp,
+                                color = TextSecondary,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = isBackgroundServiceActive,
+                        onCheckedChange = { active ->
+                            isBackgroundServiceActive = active
+                            if (active) {
+                                NeoFragxBackgroundService.startService(context)
+                                NeoFragxBackgroundService.optimizeNetwork(context)
+                                Toast.makeText(context, "Layanan penstabil ping aktif di background!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                NeoFragxBackgroundService.stopService(context)
+                                Toast.makeText(context, "Layanan latar belakang dimatikan", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = StatusSuccess, checkedTrackColor = NeonBlueDark)
+                    )
+                }
+            }
+        }
+
+        // Card 3: 1-Tap Flush DNS Cache & Traffic Shaping
         item {
             CyberCard {
                 SectionHeader(
@@ -132,8 +205,9 @@ fun NetworkStabilizerScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     CyberButton(
-                        text = "Flush DNS Cache Sekarang",
+                        text = "Flush DNS Cache",
                         icon = Icons.Default.CleaningServices,
+                        fontSize = 11.5.sp,
                         onClick = {
                             scope.launch {
                                 networkOptimizer.flushDnsCache()
@@ -144,8 +218,9 @@ fun NetworkStabilizerScreen(
                     )
 
                     CyberButton(
-                        text = "Terapkan Tweak TCP",
+                        text = "Tweak TCP Gaming",
                         icon = Icons.Default.Bolt,
+                        fontSize = 11.5.sp,
                         color = NeonBlue,
                         onClick = {
                             scope.launch {
@@ -315,7 +390,7 @@ private fun PingResultBox(title: String, ping: Long?, modifier: Modifier = Modif
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xFF0B121C))
             .border(1.dp, CyberCardStroke, RoundedCornerShape(8.dp))
-            .padding(8.dp),
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

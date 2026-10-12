@@ -33,6 +33,7 @@ class NeoFragxBackgroundService : Service() {
     private lateinit var telemetryManager: SystemTelemetryManager
     private val notificationId = 1001
     private val channelId = "neo_fragx_background_channel"
+    private var lastDetectedGamePackage: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -53,13 +54,42 @@ class NeoFragxBackgroundService : Service() {
                 val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
                 updateNotification("Pembersihan manual selesai: membebaskan ~$mb MB ($timeStr)")
             }
+        } else if (action == ACTION_CLEAN_CACHE) {
+            serviceScope.launch {
+                val freed = gameOptimizer.cleanAppCache()
+                val mb = freed / (1024 * 1024)
+                val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+                updateNotification("🧹 Cache Dibersihkan: membebaskan ~$mb MB ($timeStr)")
+            }
+        } else if (action == ACTION_FLUSH_DNS || action == ACTION_OPTIMIZE_NETWORK) {
+            serviceScope.launch {
+                networkOptimizer.flushDnsCache()
+                networkOptimizer.applyTrafficShaping()
+                val livePing = networkOptimizer.measureTargetPing("asia_gateway")
+                val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+                updateNotification("🌐 Jaringan Distabilkan: Ping ${livePing}ms • DNS Diperbarui ($timeStr)")
+            }
         } else if (action == ACTION_STOP_SERVICE) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
 
-        startForeground(notificationId, buildNotification("Engine Gaming Aktif di Latar Belakang"))
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    notificationId,
+                    buildNotification("Engine Gaming & Penstabil Jaringan Aktif"),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(notificationId, buildNotification("Engine Gaming & Penstabil Jaringan Aktif"))
+            }
+        } catch (_: Exception) {
+            try {
+                startForeground(notificationId, buildNotification("Engine Gaming & Penstabil Jaringan Aktif"))
+            } catch (_: Exception) {}
+        }
 
         // Start background monitoring and persistent cleaner loop
         startBackgroundLoops()
@@ -123,6 +153,29 @@ class NeoFragxBackgroundService : Service() {
                 delay(10000L)
             }
         }
+
+        // Loop 5: Auto Detect Game Watchdog (Every 4s)
+        serviceScope.launch {
+            while (isActive) {
+                if (gameOptimizer.isAutoDetectGameEnabled()) {
+                    val fgPkg = gameOptimizer.getForegroundPackage()
+                    if (fgPkg != null && fgPkg != lastDetectedGamePackage && fgPkg != packageName) {
+                        lastDetectedGamePackage = fgPkg
+                        val profile = gameOptimizer.loadProfile(fgPkg, fgPkg, true)
+                        if (profile.isGameCategory || profile.isTuned) {
+                            gameOptimizer.applyGameOptimizationsToSystem(profile)
+                            if (networkOptimizer.isTrafficShapingEnabled()) {
+                                networkOptimizer.applyTrafficShaping()
+                            }
+                            val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+                            updateNotification("🎮 Game Aktif: ${profile.appName} • Profil & Ping Stabilizer diterapkan ($timeStr)")
+                            gameOptimizer.addLog("AUTO_DETECT", "Game ${profile.appName} terdeteksi berjalan, profil otomatis diterapkan", "SUCCESS")
+                        }
+                    }
+                }
+                delay(4000L)
+            }
+        }
     }
 
     private suspend fun applyPersistentTouch() {
@@ -177,17 +230,27 @@ class NeoFragxBackgroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val netIntent = Intent(this, NeoFragxBackgroundService::class.java).apply {
+            action = ACTION_FLUSH_DNS
+        }
+        val pendingNet = PendingIntent.getService(
+            this, 2, netIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val touchStatus = if (gameOptimizer.isLightningTouchEnabled()) "⚡ Sentuhan: AKTIF" else "Sentuhan: Normal"
+        val netStatus = if (networkOptimizer.isTrafficShapingEnabled()) "🌐 Ping Stabil: ON (${networkOptimizer.getDnsMode().take(10)})" else "🌐 DNS: Bawaan"
         val autoJunkStatus = if (gameOptimizer.isAutoJunkCleanerEnabled()) "🧹 Auto Clean: ON (${gameOptimizer.getAutoCleanIntervalMinutes()}m)" else "Auto Clean: OFF"
 
         return NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("NEO FRAGX — Gaming Engine Berjalan")
-            .setContentText("$touchStatus | $autoJunkStatus")
-            .setStyle(NotificationCompat.BigTextStyle().bigText("$touchStatus\n$autoJunkStatus\n$subText"))
+            .setSmallIcon(com.example.R.mipmap.ic_launcher)
+            .setContentTitle("NEO FRAGX — Gaming Engine & Ping Stabilizer")
+            .setContentText("$netStatus | $touchStatus")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$netStatus\n$touchStatus\n$autoJunkStatus\n$subText"))
             .setOngoing(true)
             .setContentIntent(pendingOpen)
-            .addAction(android.R.drawable.ic_menu_rotate, "Bersihkan Sekarang", pendingClean)
+            .addAction(com.example.R.mipmap.ic_launcher, "Bersihkan RAM", pendingClean)
+            .addAction(com.example.R.mipmap.ic_launcher, "Stabilkan Ping", pendingNet)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
@@ -206,10 +269,24 @@ class NeoFragxBackgroundService : Service() {
 
     companion object {
         const val ACTION_CLEAN_NOW = "com.example.action.CLEAN_NOW"
+        const val ACTION_CLEAN_CACHE = "com.example.action.CLEAN_CACHE"
         const val ACTION_STOP_SERVICE = "com.example.action.STOP_SERVICE"
+        const val ACTION_FLUSH_DNS = "com.example.action.FLUSH_DNS"
+        const val ACTION_OPTIMIZE_NETWORK = "com.example.action.OPTIMIZE_NETWORK"
 
         fun startService(context: Context) {
             val intent = Intent(context, NeoFragxBackgroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun optimizeNetwork(context: Context) {
+            val intent = Intent(context, NeoFragxBackgroundService::class.java).apply {
+                action = ACTION_OPTIMIZE_NETWORK
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {

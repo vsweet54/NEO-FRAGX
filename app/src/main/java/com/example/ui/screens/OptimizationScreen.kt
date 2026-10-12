@@ -63,7 +63,11 @@ fun OptimizationScreen(
     // Audio & Game Dock States
     var bluetoothLowLatency by remember { mutableStateOf(false) }
     var trebleBoosterActive by remember { mutableStateOf(false) }
-    var isFloatingDockOn by remember { mutableStateOf(false) }
+    var isFloatingDockOn by remember { mutableStateOf(FloatingFpsService.isRunning) }
+
+    LaunchedEffect(Unit) {
+        isFloatingDockOn = FloatingFpsService.isRunning
+    }
 
     // Audio & Ping states
     var isRunningSpeakerCleaner by remember { mutableStateOf(false) }
@@ -574,9 +578,11 @@ fun OptimizationScreen(
                         color = if (isFloatingDockOn) StatusDanger else NeonCyan,
                         onClick = {
                             if (!isFloatingDockOn) {
-                                FloatingFpsService.startOverlay(context)
-                                isFloatingDockOn = true
-                                Toast.makeText(context, "Dock Game aktif di atas layar! Geser atau ketuk gelembung untuk membuka menu.", Toast.LENGTH_LONG).show()
+                                val started = FloatingFpsService.startOverlay(context)
+                                isFloatingDockOn = started
+                                if (started) {
+                                    Toast.makeText(context, "Dock Game aktif di atas layar! Geser atau ketuk gelembung untuk membuka menu.", Toast.LENGTH_LONG).show()
+                                }
                             } else {
                                 FloatingFpsService.stopOverlay(context)
                                 isFloatingDockOn = false

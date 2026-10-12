@@ -152,52 +152,58 @@ class RenderingEngineDetector(private val context: Context) {
         var version = ""
         var extCount = 0
 
-        val display: EGLDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
-        if (display == EGL14.EGL_NO_DISPLAY) {
-            return Quadruple(renderer, vendor, version, extCount)
-        }
-
-        val versionArr = IntArray(2)
-        if (!EGL14.eglInitialize(display, versionArr, 0, versionArr, 1)) {
-            return Quadruple(renderer, vendor, version, extCount)
-        }
-
-        val attribList = intArrayOf(
-            EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
-            EGL14.EGL_SURFACE_TYPE, EGL14.EGL_PBUFFER_BIT,
-            EGL14.EGL_NONE
-        )
-        val configs = arrayOfNullOrEmpty<EGLConfig>(1)
-        val numConfigs = IntArray(1)
-        EGL14.eglChooseConfig(display, attribList, 0, configs, 0, configs.size, numConfigs, 0)
-
-        if (numConfigs[0] > 0 && configs[0] != null) {
-            val contextAttribs = intArrayOf(
-                EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
-                EGL14.EGL_NONE
-            )
-            val eglContext: EGLContext = EGL14.eglCreateContext(display, configs[0], EGL14.EGL_NO_CONTEXT, contextAttribs, 0)
-
-            val pbufferAttribs = intArrayOf(
-                EGL14.EGL_WIDTH, 1,
-                EGL14.EGL_HEIGHT, 1,
-                EGL14.EGL_NONE
-            )
-            val surface: EGLSurface = EGL14.eglCreatePbufferSurface(display, configs[0], pbufferAttribs, 0)
-
-            if (EGL14.eglMakeCurrent(display, surface, surface, eglContext)) {
-                renderer = GLES20.glGetString(GLES20.GL_RENDERER) ?: ""
-                vendor = GLES20.glGetString(GLES20.GL_VENDOR) ?: ""
-                version = GLES20.glGetString(GLES20.GL_VERSION) ?: ""
-                val extStr = GLES20.glGetString(GLES20.GL_EXTENSIONS) ?: ""
-                extCount = if (extStr.isNotBlank()) extStr.split(" ").size else 0
-
-                EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
+        try {
+            val display: EGLDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
+            if (display == EGL14.EGL_NO_DISPLAY) {
+                return Quadruple(renderer, vendor, version, extCount)
             }
-            EGL14.eglDestroySurface(display, surface)
-            EGL14.eglDestroyContext(display, eglContext)
+
+            val versionArr = IntArray(2)
+            if (!EGL14.eglInitialize(display, versionArr, 0, versionArr, 1)) {
+                return Quadruple(renderer, vendor, version, extCount)
+            }
+
+            val attribList = intArrayOf(
+                EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+                EGL14.EGL_SURFACE_TYPE, EGL14.EGL_PBUFFER_BIT,
+                EGL14.EGL_NONE
+            )
+            val configs = arrayOfNullOrEmpty<EGLConfig>(1)
+            val numConfigs = IntArray(1)
+            EGL14.eglChooseConfig(display, attribList, 0, configs, 0, configs.size, numConfigs, 0)
+
+            if (numConfigs[0] > 0 && configs[0] != null) {
+                val contextAttribs = intArrayOf(
+                    EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
+                    EGL14.EGL_NONE
+                )
+                val eglContext: EGLContext = EGL14.eglCreateContext(display, configs[0], EGL14.EGL_NO_CONTEXT, contextAttribs, 0)
+
+                val pbufferAttribs = intArrayOf(
+                    EGL14.EGL_WIDTH, 1,
+                    EGL14.EGL_HEIGHT, 1,
+                    EGL14.EGL_NONE
+                )
+                val surface: EGLSurface = EGL14.eglCreatePbufferSurface(display, configs[0], pbufferAttribs, 0)
+
+                if (eglContext != EGL14.EGL_NO_CONTEXT && surface != EGL14.EGL_NO_SURFACE) {
+                    if (EGL14.eglMakeCurrent(display, surface, surface, eglContext)) {
+                        renderer = GLES20.glGetString(GLES20.GL_RENDERER) ?: ""
+                        vendor = GLES20.glGetString(GLES20.GL_VENDOR) ?: ""
+                        version = GLES20.glGetString(GLES20.GL_VERSION) ?: ""
+                        val extStr = GLES20.glGetString(GLES20.GL_EXTENSIONS) ?: ""
+                        extCount = if (extStr.isNotBlank()) extStr.split(" ").size else 0
+
+                        EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
+                    }
+                    EGL14.eglDestroySurface(display, surface)
+                    EGL14.eglDestroyContext(display, eglContext)
+                }
+            }
+            EGL14.eglTerminate(display)
+        } catch (_: Throwable) {
+            // Safe fallback if hardware EGL is restricted on device
         }
-        EGL14.eglTerminate(display)
 
         return Quadruple(renderer, vendor, version, extCount)
     }

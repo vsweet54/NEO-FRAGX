@@ -210,14 +210,15 @@ fun CyberButton(
     icon: ImageVector? = null,
     isPrimary: Boolean = true,
     color: Color = NeonCyan,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    fontSize: androidx.compose.ui.unit.TextUnit = 11.5.sp
 ) {
     val shape = RoundedCornerShape(10.dp)
     Button(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
-            .height(44.dp)
+            .height(40.dp)
             .border(
                 1.dp,
                 if (isPrimary) color.copy(alpha = 0.8f) else CyberCardStroke,
@@ -230,17 +231,20 @@ fun CyberButton(
             disabledContainerColor = CyberCard.copy(alpha = 0.5f),
             disabledContentColor = TextSecondary.copy(alpha = 0.5f)
         ),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
     ) {
         if (icon != null) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = color)
-            Spacer(modifier = Modifier.width(8.dp))
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(15.dp), tint = color)
+            Spacer(modifier = Modifier.width(4.dp))
         }
         Text(
             text = text,
-            fontSize = 13.sp,
+            fontSize = fontSize,
             fontWeight = FontWeight.SemiBold,
-            color = if (isPrimary) color else TextPrimary
+            color = if (isPrimary) color else TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false
         )
     }
 }

@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,9 +28,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.OperationLog
+import com.example.tuner.BackupManager
 import com.example.tuner.GameOptimizer
 import com.example.ui.components.*
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,6 +42,7 @@ fun ToolsScreen(
     gameOptimizer: GameOptimizer
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var logs by remember { mutableStateOf(gameOptimizer.getLogs()) }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var restoreInputText by remember { mutableStateOf("") }
@@ -45,6 +50,32 @@ fun ToolsScreen(
 
     fun refreshLogs() {
         logs = gameOptimizer.getLogs()
+    }
+
+    val restoreFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    if (!content.isNullOrEmpty()) {
+                        val success = BackupManager.restoreFullConfig(gameOptimizer, content)
+                        refreshLogs()
+                        if (success) {
+                            showRestoreDialog = false
+                            Toast.makeText(context, "Konfigurasi berhasil dipulihkan dari file penyimpanan!", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Format file cadangan tidak valid!", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(context, "File kosong!", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Gagal membaca file: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     LazyColumn(
@@ -78,26 +109,54 @@ fun ToolsScreen(
                 ) {
                     // Backup
                     CyberButton(
-                        text = "Cadangkan",
+                        text = "Cadangkan Config",
                         icon = Icons.Default.CloudUpload,
+                        fontSize = 11.5.sp,
                         onClick = {
-                            val backupJson = "{\"neo_version\":\"3.0\",\"export_time\":${System.currentTimeMillis()},\"engine\":\"NEO_FRAGX\"}"
+                            val backupJson = BackupManager.createFullConfigBackupJson(gameOptimizer)
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("NEO Backup", backupJson))
-                            gameOptimizer.addLog("BACKUP", "Cadangan konfigurasi diekspor ke clipboard", "SUCCESS")
+                            val (saved, path) = BackupManager.saveToDownloads(context, "neo_fragx_config_backup.json", backupJson)
+                            gameOptimizer.addLog("BACKUP", "Cadangan konfigurasi disimpan di $path", "SUCCESS")
                             refreshLogs()
-                            Toast.makeText(context, "Cadangan JSON disalin ke Clipboard!", Toast.LENGTH_SHORT).show()
+                            if (saved) {
+                                Toast.makeText(context, "Tersimpan di $path & disalin ke Clipboard!", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "Cadangan disalin ke Clipboard! ($path)", Toast.LENGTH_LONG).show()
+                            }
                         },
                         modifier = Modifier.weight(1f)
                     )
 
                     // Restore
                     CyberButton(
-                        text = "Pulihkan",
+                        text = "Pulihkan Config",
                         icon = Icons.Default.CloudDownload,
+                        fontSize = 11.5.sp,
                         onClick = { showRestoreDialog = true },
                         modifier = Modifier.weight(1f),
                         color = NeonBlue
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Folder info notice
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF0C1420))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(imageVector = Icons.Default.Folder, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Lokasi File: Download/NEO FRAGX/neo_fragx_config_backup.json",
+                        fontSize = 10.sp,
+                        color = TextSecondary,
+                        fontFamily = FontFamily.Monospace
                     )
                 }
 
@@ -228,29 +287,57 @@ fun ToolsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showRestoreDialog = false
-                        gameOptimizer.addLog("RESTORE", "Konfigurasi berhasil dipulihkan dari data cadangan", "SUCCESS")
-                        refreshLogs()
-                        Toast.makeText(context, "Konfigurasi berhasil dipulihkan!", Toast.LENGTH_SHORT).show()
+                        if (restoreInputText.isNotBlank()) {
+                            scope.launch {
+                                val success = BackupManager.restoreFullConfig(gameOptimizer, restoreInputText)
+                                refreshLogs()
+                                showRestoreDialog = false
+                                if (success) {
+                                    Toast.makeText(context, "Konfigurasi berhasil dipulihkan dari teks!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Format file cadangan tidak valid!", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            showRestoreDialog = false
+                        }
                     }
                 ) {
-                    Text("Pulihkan", color = NeonCyan)
+                    Text("Terapkan Teks", color = NeonCyan, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRestoreDialog = false }) {
-                    Text("Batal", color = TextSecondary)
+                    Text("Tutup", color = TextSecondary)
                 }
             },
             title = { Text("Pulihkan Konfigurasi", color = TextPrimary, fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Tempelkan data JSON cadangan Anda di bawah ini:", fontSize = 12.sp, color = TextSecondary)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Pulihkan setelan dari file cadangan yang tersimpan di penyimpanan (Download/NEO FRAGX):",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+
+                    CyberButton(
+                        text = "Pilih File Cadangan dari Penyimpanan (.json)",
+                        icon = Icons.Default.FolderOpen,
+                        onClick = {
+                            showRestoreDialog = false
+                            restoreFileLauncher.launch("*/*")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text("Atau tempelkan kode JSON cadangan secara manual:", fontSize = 11.sp, color = TextSecondary)
+
                     OutlinedTextField(
                         value = restoreInputText,
                         onValueChange = { restoreInputText = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("{\"neo_version\":\"3.0\", ...}", fontSize = 11.sp) },
+                        placeholder = { Text("{\"app\":\"NEO_FRAGX\", ...}", fontSize = 11.sp) },
                         maxLines = 4
                     )
                 }
