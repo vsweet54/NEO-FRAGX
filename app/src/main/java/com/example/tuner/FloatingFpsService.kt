@@ -219,239 +219,400 @@ class FloatingFpsService : Service() {
             orientation = LinearLayout.VERTICAL
         }
 
-        // 1. Collapsed Pill (Always Visible Header)
+        val dp = windowContext.resources.displayMetrics.density
+
+        // 1. Collapsed Pill (Cyberpunk HUD Pill with Neon Glow & Clean Badges)
         val pillLayout = LinearLayout(windowContext).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(24, 14, 24, 14)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((12 * dp).toInt(), (6 * dp).toInt(), (10 * dp).toInt(), (6 * dp).toInt())
             val bg = GradientDrawable().apply {
-                setColor(Color.parseColor("#EE080C14"))
-                setStroke(3, Color.parseColor("#00F0FF"))
-                cornerRadius = 24f
+                setColor(Color.parseColor("#F2080D18"))
+                setStroke((1.8f * dp).toInt(), Color.parseColor("#00F0FF"))
+                cornerRadius = 20 * dp
             }
             background = bg
+        }
+
+        // FPS Badge Box (Highlighted Monospace Indicator)
+        val fpsBadge = LinearLayout(windowContext).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((8 * dp).toInt(), (3 * dp).toInt(), (8 * dp).toInt(), (3 * dp).toInt())
+            val badgeBg = GradientDrawable().apply {
+                setColor(Color.parseColor("#1E00E676"))
+                setStroke((1 * dp).toInt(), Color.parseColor("#00E676"))
+                cornerRadius = 8 * dp
+            }
+            background = badgeBg
+        }
+
+        val fpsDot = TextView(windowContext).apply {
+            text = "● "
+            setTextColor(Color.parseColor("#00E676"))
+            textSize = 9f
         }
 
         val fpsTextView = TextView(windowContext).apply {
             text = "${targetMaxFps.toInt()} FPS"
             setTextColor(Color.parseColor("#00E676"))
-            textSize = 13f
+            textSize = 12f
             typeface = Typeface.MONOSPACE
             paint.isFakeBoldText = true
         }
+
+        fpsBadge.addView(fpsDot)
+        fpsBadge.addView(fpsTextView)
+        pillLayout.addView(fpsBadge)
 
         val pingTextView = TextView(windowContext).apply {
-            text = " • 24ms"
-            setTextColor(Color.parseColor("#00E676"))
+            text = " 📶 24ms"
+            setTextColor(Color.parseColor("#00F0FF"))
             textSize = 11f
             typeface = Typeface.MONOSPACE
             paint.isFakeBoldText = true
+            setPadding((6 * dp).toInt(), 0, (2 * dp).toInt(), 0)
         }
+        pillLayout.addView(pingTextView)
 
         val infoTextView = TextView(windowContext).apply {
-            text = " • 48% RAM • 38°C"
+            text = " • 🧠 48% • 🌡 38°C"
             setTextColor(Color.parseColor("#8B9BB4"))
-            textSize = 11f
+            textSize = 10.5f
             paint.isFakeBoldText = true
         }
+        pillLayout.addView(infoTextView)
 
         val expandIcon = TextView(windowContext).apply {
-            text = " ⚙ MENU"
+            text = " ⚙ MENU "
             setTextColor(Color.parseColor("#00F0FF"))
-            textSize = 11f
+            textSize = 10f
             paint.isFakeBoldText = true
+            setPadding((8 * dp).toInt(), (4 * dp).toInt(), (8 * dp).toInt(), (4 * dp).toInt())
+            val btnBg = GradientDrawable().apply {
+                setColor(Color.parseColor("#2200F0FF"))
+                setStroke((1 * dp).toInt(), Color.parseColor("#00F0FF"))
+                cornerRadius = 8 * dp
+            }
+            background = btnBg
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftMargin = (8 * dp).toInt()
+            }
+            layoutParams = lp
         }
-
-        pillLayout.addView(fpsTextView)
-        pillLayout.addView(pingTextView)
-        pillLayout.addView(infoTextView)
         pillLayout.addView(expandIcon)
 
-        // 2. Expandable Game Dock Panel (Full Game Turbo Console)
+        // 2. Expandable Game Dock Panel (Full Game Turbo Console with Symmetrical HUD Grid)
         val dockPanel = LinearLayout(windowContext).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
-            setPadding(20, 16, 20, 16)
-            val panelBg = GradientDrawable().apply {
-                setColor(Color.parseColor("#F50D1522"))
-                setStroke(2, Color.parseColor("#1E2E44"))
-                cornerRadius = 18f
+            setPadding((14 * dp).toInt(), (14 * dp).toInt(), (14 * dp).toInt(), (14 * dp).toInt())
+            val panelBg = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor("#F50D1526"), Color.parseColor("#F80A0F1D"))
+            ).apply {
+                setStroke((1.5f * dp).toInt(), Color.parseColor("#00F0FF"))
+                cornerRadius = 18 * dp
             }
             background = panelBg
-            val topMargin = (8 * windowContext.resources.displayMetrics.density).toInt()
-            (layoutParams as? LinearLayout.LayoutParams)?.topMargin = topMargin
+            val lp = LinearLayout.LayoutParams((320 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (8 * dp).toInt()
+            }
+            layoutParams = lp
         }
 
-        // Dock Title & Telemetry Header
+        // Header: Brand & Target Refresh Rate
+        val headerRow = LinearLayout(windowContext).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, (6 * dp).toInt())
+        }
         val dockTitle = TextView(windowContext).apply {
-            text = "⚡ NEO GAME DOCK (Target: ${targetMaxFps.toInt()}Hz)"
+            text = "⚡ NEO GAME DOCK"
             setTextColor(Color.parseColor("#00F0FF"))
-            textSize = 12f
+            textSize = 12.5f
             typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        dockPanel.addView(dockTitle)
-
-        dockStatsTextView = TextView(windowContext).apply {
-            text = "FPS: ${targetMaxFps.toInt()} (Min: ${targetMaxFps.toInt()}, Max: ${targetMaxFps.toInt()}) • Jitter: 0.8ms"
-            setTextColor(Color.parseColor("#8B9BB4"))
-            textSize = 10f
+        val targetHzTag = TextView(windowContext).apply {
+            text = "[ ${targetMaxFps.toInt()}Hz TARGET ]"
+            setTextColor(Color.parseColor("#00E676"))
+            textSize = 9.5f
             typeface = Typeface.MONOSPACE
-            setPadding(0, 4, 0, 6)
+            paint.isFakeBoldText = true
+            setPadding((6 * dp).toInt(), (2 * dp).toInt(), (6 * dp).toInt(), (2 * dp).toInt())
+            val tagBg = GradientDrawable().apply {
+                setColor(Color.parseColor("#1800E676"))
+                setStroke((1 * dp).toInt(), Color.parseColor("#00E676"))
+                cornerRadius = 6 * dp
+            }
+            background = tagBg
         }
-        dockPanel.addView(dockStatsTextView)
+        headerRow.addView(dockTitle)
+        headerRow.addView(targetHzTag)
+        dockPanel.addView(headerRow)
 
-        // Performance Mode Selector Row (Turbo, Balanced, Eco)
+        // Telemetry Box
+        val telemetryCard = LinearLayout(windowContext).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((10 * dp).toInt(), (8 * dp).toInt(), (10 * dp).toInt(), (8 * dp).toInt())
+            val cardBg = GradientDrawable().apply {
+                setColor(Color.parseColor("#0C1322"))
+                setStroke((1 * dp).toInt(), Color.parseColor("#1B2A3E"))
+                cornerRadius = 10 * dp
+            }
+            background = cardBg
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = (10 * dp).toInt()
+            }
+            layoutParams = lp
+        }
+        dockStatsTextView = TextView(windowContext).apply {
+            text = "REAL: ${targetMaxFps.toInt()} FPS • MIN: ${targetMaxFps.toInt()} • MAX: ${targetMaxFps.toInt()} • JITTER: 0.8ms"
+            setTextColor(Color.parseColor("#00F0FF"))
+            textSize = 9.5f
+            typeface = Typeface.MONOSPACE
+            paint.isFakeBoldText = true
+        }
+        val hardwareStatsTextView = TextView(windowContext).apply {
+            text = "GPU/CPU Turbo: Aktif  •  Jaringan: Prioritas Latensi Rendah"
+            setTextColor(Color.parseColor("#7D92AF"))
+            textSize = 8.5f
+            setPadding(0, (2 * dp).toInt(), 0, 0)
+        }
+        telemetryCard.addView(dockStatsTextView)
+        telemetryCard.addView(hardwareStatsTextView)
+        dockPanel.addView(telemetryCard)
+
+        // Section 1 Header: PROFIL PERFORMA
+        val modeHeader = TextView(windowContext).apply {
+            text = "PROFIL PERFORMA HARDWARE"
+            setTextColor(Color.parseColor("#657C9B"))
+            textSize = 8.5f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, (4 * dp).toInt())
+        }
+        dockPanel.addView(modeHeader)
+
+        // Performance Mode Segmented Bar
         val modeRow = LinearLayout(windowContext).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 4, 0, 8)
+            setPadding((2 * dp).toInt(), (2 * dp).toInt(), (2 * dp).toInt(), (2 * dp).toInt())
+            val bg = GradientDrawable().apply {
+                setColor(Color.parseColor("#09101C"))
+                setStroke((1 * dp).toInt(), Color.parseColor("#18263A"))
+                cornerRadius = 10 * dp
+            }
+            background = bg
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = (10 * dp).toInt()
+            }
+            layoutParams = lp
         }
-        val turboModeBtn = createDockButton(windowContext, "🚀 Turbo", "#00F0FF") { btn ->
-            activePerformanceMode = "TURBO"
-            Toast.makeText(this@FloatingFpsService, "🚀 Mode TURBO Aktif: CPU Clock & Touch Responsif Maksimal!", Toast.LENGTH_SHORT).show()
+
+        fun createModeTab(text: String, modeKey: String, accentHex: String): TextView {
+            val isSelected = activePerformanceMode == modeKey
+            return TextView(windowContext).apply {
+                this.text = text
+                textSize = 10.5f
+                paint.isFakeBoldText = true
+                gravity = Gravity.CENTER
+                setPadding(0, (7 * dp).toInt(), 0, (7 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                val tabBg = GradientDrawable().apply {
+                    if (isSelected) {
+                        setColor(Color.parseColor("#26" + accentHex.removePrefix("#")))
+                        setStroke((1.2f * dp).toInt(), Color.parseColor(accentHex))
+                    } else {
+                        setColor(Color.TRANSPARENT)
+                    }
+                    cornerRadius = 8 * dp
+                }
+                background = tabBg
+                setTextColor(if (isSelected) Color.parseColor(accentHex) else Color.parseColor("#7E91AA"))
+            }
         }
-        val balancedModeBtn = createDockButton(windowContext, "⚖️ Seimbang", "#8B9BB4") { btn ->
-            activePerformanceMode = "BALANCED"
-            Toast.makeText(this@FloatingFpsService, "⚖️ Mode SEIMBANG Aktif: Suhu & Baterai Optimal", Toast.LENGTH_SHORT).show()
+
+        lateinit var turboTab: TextView
+        lateinit var balancedTab: TextView
+        lateinit var ecoTab: TextView
+
+        fun refreshModeTabs() {
+            val tabs = listOf(turboTab to ("TURBO" to "#00F0FF"), balancedTab to ("BALANCED" to "#00E676"), ecoTab to ("ECO" to "#FFB800"))
+            tabs.forEach { (tab, pair) ->
+                val (mode, hex) = pair
+                val isSel = activePerformanceMode == mode
+                tab.setTextColor(if (isSel) Color.parseColor(hex) else Color.parseColor("#7E91AA"))
+                tab.background = GradientDrawable().apply {
+                    if (isSel) {
+                        setColor(Color.parseColor("#26" + hex.removePrefix("#")))
+                        setStroke((1.2f * dp).toInt(), Color.parseColor(hex))
+                    } else {
+                        setColor(Color.TRANSPARENT)
+                    }
+                    cornerRadius = 8 * dp
+                }
+            }
         }
-        val ecoModeBtn = createDockButton(windowContext, "🔋 Hemat", "#FFB800") { btn ->
-            activePerformanceMode = "ECO"
-            Toast.makeText(this@FloatingFpsService, "🔋 Mode HEMAT Baterai Aktif: Frame Rate Dingin & Hemat Daya", Toast.LENGTH_SHORT).show()
+
+        turboTab = createModeTab("🚀 Turbo", "TURBO", "#00F0FF").apply {
+            setOnClickListener {
+                activePerformanceMode = "TURBO"
+                refreshModeTabs()
+                Toast.makeText(this@FloatingFpsService, "🚀 Mode TURBO: CPU & Touch Responsif Maksimal!", Toast.LENGTH_SHORT).show()
+            }
         }
-        modeRow.addView(turboModeBtn)
-        modeRow.addView(balancedModeBtn)
-        modeRow.addView(ecoModeBtn)
+        balancedTab = createModeTab("⚖ Seimbang", "BALANCED", "#00E676").apply {
+            setOnClickListener {
+                activePerformanceMode = "BALANCED"
+                refreshModeTabs()
+                Toast.makeText(this@FloatingFpsService, "⚖ Mode SEIMBANG: Suhu & Baterai Optimal", Toast.LENGTH_SHORT).show()
+            }
+        }
+        ecoTab = createModeTab("🔋 Hemat", "ECO", "#FFB800").apply {
+            setOnClickListener {
+                activePerformanceMode = "ECO"
+                refreshModeTabs()
+                Toast.makeText(this@FloatingFpsService, "🔋 Mode HEMAT: Frame Rate Stabil & Dingin", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        modeRow.addView(turboTab)
+        modeRow.addView(balancedTab)
+        modeRow.addView(ecoTab)
         dockPanel.addView(modeRow)
 
-        // Dock Buttons Row 1: RAM & Cache Clean
-        val buttonsRow1 = LinearLayout(windowContext).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 4, 0, 6)
+        // Section 2 Header: PINTASAN GAMING CEPAT
+        val toolsHeader = TextView(windowContext).apply {
+            text = "PINTASAN GAMING CEPAT"
+            setTextColor(Color.parseColor("#657C9B"))
+            textSize = 8.5f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, (4 * dp).toInt())
         }
+        dockPanel.addView(toolsHeader)
 
-        val boostBtn = createDockButton(windowContext, "⚡ Boost RAM", "#00F0FF") {
+        // 4 Uniform Rows of Symmetrical 2-Column Cyber Cards
+        // Row 1: RAM & Cache Clean
+        val row1 = LinearLayout(windowContext).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val boostBtn = createCyberCardButton(windowContext, "Boost RAM", "Bebaskan Memori", "⚡", "#00F0FF") {
             scope.launch {
                 val (killed, freed) = gameOptimizer.trimRamMemory()
                 val mb = freed / (1024 * 1024)
-                Toast.makeText(this@FloatingFpsService, "RAM Dibersihkan: ~$mb MB dibebaskan ($killed proses)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@FloatingFpsService, "RAM Bersih: ~$mb MB dibebaskan ($killed proses)", Toast.LENGTH_SHORT).show()
                 fpsTextView.setTextColor(Color.parseColor("#00E676"))
-                delay(1200)
             }
         }
-
-        val cleanCacheBtn = createDockButton(windowContext, "🧹 Hapus Cache", "#FFB800") { btn ->
+        val cleanCacheBtn = createCyberCardButton(windowContext, "Deep Clean", "Hapus Junk Cache", "🧹", "#FFB800") {
             scope.launch {
-                (btn as? TextView)?.text = "🧹 Memproses..."
                 val freed = gameOptimizer.cleanAppCache()
                 val mb = freed / (1024 * 1024)
-                Toast.makeText(this@FloatingFpsService, "Cache Game & Sistem: ~$mb MB berhasil dibebaskan!", Toast.LENGTH_SHORT).show()
-                (btn as? TextView)?.text = "🧹 Cache Bersih (~${mb}MB)"
-                (btn as? TextView)?.setTextColor(Color.parseColor("#00E676"))
-                delay(2500)
-                (btn as? TextView)?.text = "🧹 Hapus Cache"
-                (btn as? TextView)?.setTextColor(Color.parseColor("#FFB800"))
+                Toast.makeText(this@FloatingFpsService, "Cache Bersih: ~$mb MB dibebaskan!", Toast.LENGTH_SHORT).show()
             }
         }
+        row1.addView(boostBtn)
+        row1.addView(cleanCacheBtn)
+        dockPanel.addView(row1)
 
-        buttonsRow1.addView(boostBtn)
-        buttonsRow1.addView(cleanCacheBtn)
-        dockPanel.addView(buttonsRow1)
-
-        // Dock Buttons Row 2: Ping Stabilizer & Crosshair Layar
-        val buttonsRow2 = LinearLayout(windowContext).apply {
+        // Row 2: Ping Stabilizer & Crosshair
+        val row2 = LinearLayout(windowContext).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 4, 0, 6)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-
-        val pingFixBtn = createDockButton(windowContext, "🌐 Stabilkan Ping", "#00E676") { btn ->
+        val pingFixBtn = createCyberCardButton(windowContext, "Stabil Ping", "Prioritas Paket", "🌐", "#00E676") {
             scope.launch {
-                (btn as? TextView)?.text = "🌐 Memproses..."
                 networkOptimizer.flushDnsCache()
                 networkOptimizer.applyTrafficShaping()
                 val newPing = networkOptimizer.measureTargetPing("asia_gateway")
                 if (newPing > 0) livePingMs = newPing
-                (btn as? TextView)?.text = "🌐 Ping: ${livePingMs}ms"
-                (btn as? TextView)?.setTextColor(Color.parseColor("#00E676"))
-                Toast.makeText(this@FloatingFpsService, "Ping Distabilkan: Cache DNS dibersihkan & paket game diprioritaskan!", Toast.LENGTH_SHORT).show()
-                delay(3000)
-                (btn as? TextView)?.text = "🌐 Stabilkan Ping"
-                (btn as? TextView)?.setTextColor(Color.parseColor("#00E676"))
+                Toast.makeText(this@FloatingFpsService, "Ping Distabilkan: Paket game diprioritaskan!", Toast.LENGTH_SHORT).show()
             }
         }
-
-        val crosshairBtn = createDockButton(windowContext, if (isCrosshairActive) "🎯 Crosshair: ON" else "🎯 Crosshair", if (isCrosshairActive) "#00E676" else "#00F0FF") { btn ->
+        val crosshairBtn = createCyberCardButton(windowContext, if (isCrosshairActive) "Crosshair: ON" else "Crosshair HUD", "Titik Bidik Layar", "🎯", if (isCrosshairActive) "#00E676" else "#00F0FF") {
             toggleCrosshair(windowContext)
-            (btn as? TextView)?.text = if (isCrosshairActive) "🎯 Crosshair: ON" else "🎯 Crosshair"
-            (btn as? TextView)?.setTextColor(if (isCrosshairActive) Color.parseColor("#00E676") else Color.parseColor("#00F0FF"))
         }
+        row2.addView(pingFixBtn)
+        row2.addView(crosshairBtn)
+        dockPanel.addView(row2)
 
-        buttonsRow2.addView(pingFixBtn)
-        buttonsRow2.addView(crosshairBtn)
-        dockPanel.addView(buttonsRow2)
-
-        // Dock Buttons Row 3: Game DND & Touch Protection
-        val buttonsRow3 = LinearLayout(windowContext).apply {
+        // Row 3: Game DND & Touch Guard
+        val row3 = LinearLayout(windowContext).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 4, 0, 6)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-
-        val dndBtn = createDockButton(windowContext, "🔕 DND: OFF", "#8B9BB4") {
+        val dndBtn = createCyberCardButton(windowContext, if (isDndActive) "DND: AKTIF" else "Game DND", "Blokir Notifikasi", "🔕", if (isDndActive) "#00E676" else "#7E92AE") {
             isDndActive = !isDndActive
-            (it as? TextView)?.text = if (isDndActive) "🔕 DND: ON" else "🔕 DND: OFF"
-            (it as? TextView)?.setTextColor(if (isDndActive) Color.parseColor("#00E676") else Color.parseColor("#8B9BB4"))
-            Toast.makeText(this, if (isDndActive) "DND Aktif: Notifikasi dan panggilan diminimalisir saat gaming" else "DND Dinonaktifkan", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (isDndActive) "Game DND Aktif: Notifikasi diminimalisir" else "DND Dinonaktifkan", Toast.LENGTH_SHORT).show()
         }
-
-        val touchGuardBtn = createDockButton(windowContext, "🔒 Touch Guard", "#8B9BB4") {
+        val touchGuardBtn = createCyberCardButton(windowContext, if (isTouchGuardActive) "Guard: ON" else "Touch Guard", "Anti Salah Sentuh", "🔒", if (isTouchGuardActive) "#00E676" else "#7E92AE") {
             isTouchGuardActive = !isTouchGuardActive
-            (it as? TextView)?.text = if (isTouchGuardActive) "🔒 Lock: ON" else "🔒 Touch Guard"
-            (it as? TextView)?.setTextColor(if (isTouchGuardActive) Color.parseColor("#00E676") else Color.parseColor("#8B9BB4"))
-            Toast.makeText(this, if (isTouchGuardActive) "Touch Guard: Edge touch & navigasi layar dilindungi" else "Touch Guard Nonaktif", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (isTouchGuardActive) "Touch Guard Aktif: Tepi layar dilindungi" else "Touch Guard Nonaktif", Toast.LENGTH_SHORT).show()
         }
+        row3.addView(dndBtn)
+        row3.addView(touchGuardBtn)
+        dockPanel.addView(row3)
 
-        buttonsRow3.addView(dndBtn)
-        buttonsRow3.addView(touchGuardBtn)
-        dockPanel.addView(buttonsRow3)
-
-        // Dock Buttons Row 4: Speaker Cleaner & Compact Pill Mode
-        val buttonsRow4 = LinearLayout(windowContext).apply {
+        // Row 4: Clean Speaker & Compact Pill
+        val row4 = LinearLayout(windowContext).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 4, 0, 6)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-
-        val speakerBtn = createDockButton(windowContext, "🔊 Bersih Speaker", "#00F0FF") { btn ->
+        val speakerBtn = createCyberCardButton(windowContext, "Bersih Speaker", "Gelombang 165Hz", "🔊", "#00F0FF") {
             scope.launch {
-                (btn as? TextView)?.text = "🔊 Membersihkan..."
-                Toast.makeText(this@FloatingFpsService, "Frekuensi Sonik 165Hz dimainkan untuk membersihkan debu/air dari speaker!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@FloatingFpsService, "Frekuensi Sonik 165Hz dimainkan!", Toast.LENGTH_SHORT).show()
                 gameOptimizer.runSpeakerCleanerTone(durationSec = 4) {}
-                (btn as? TextView)?.text = "🔊 Speaker Bersih"
-                delay(2000)
-                (btn as? TextView)?.text = "🔊 Bersih Speaker"
             }
         }
-
-        val compactBtn = createDockButton(windowContext, if (isCompactPill) "📐 Mode Ringkas: ON" else "📐 Mode Ringkas", "#8B9BB4") { btn ->
+        val compactBtn = createCyberCardButton(windowContext, if (isCompactPill) "Ringkas: ON" else "Mode Ringkas", "Sederhanakan Pill", "📐", if (isCompactPill) "#00E676" else "#7E92AE") {
             isCompactPill = !isCompactPill
             infoTextView.visibility = if (isCompactPill) View.GONE else View.VISIBLE
             pingTextView.visibility = if (isCompactPill) View.GONE else View.VISIBLE
-            (btn as? TextView)?.text = if (isCompactPill) "📐 Mode Ringkas: ON" else "📐 Mode Ringkas"
-            (btn as? TextView)?.setTextColor(if (isCompactPill) Color.parseColor("#00E676") else Color.parseColor("#8B9BB4"))
-            Toast.makeText(this@FloatingFpsService, if (isCompactPill) "Tampilan Pill disederhanakan (Hanya FPS)" else "Tampilan Pill Lengkap (FPS, Ping, RAM, Suhu)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@FloatingFpsService, if (isCompactPill) "Pill Ringkas: Hanya FPS Aktif" else "Pill Lengkap: FPS, Ping, RAM & Suhu Aktif", Toast.LENGTH_SHORT).show()
         }
+        row4.addView(speakerBtn)
+        row4.addView(compactBtn)
+        dockPanel.addView(row4)
 
-        buttonsRow4.addView(speakerBtn)
-        buttonsRow4.addView(compactBtn)
-        dockPanel.addView(buttonsRow4)
-
-        // Dock Buttons Row 5: Close Button
-        val buttonsRow5 = LinearLayout(windowContext).apply {
+        // Bottom Controls: Tutup Menu & Matikan Overlay
+        val bottomControlsRow = LinearLayout(windowContext).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 4, 0, 6)
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (6 * dp).toInt()
+            }
+            layoutParams = lp
         }
 
-        val closeBtn = createDockButton(windowContext, "✕ Tutup Dock", "#FF3366") {
+        fun toggleDockExpansion() {
+            isExpanded = !isExpanded
+            dockPanel.visibility = if (isExpanded) View.VISIBLE else View.GONE
+            expandIcon.text = if (isExpanded) " ▲ TUTUP " else " ⚙ MENU "
+            val btnBg = GradientDrawable().apply {
+                setColor(Color.parseColor(if (isExpanded) "#22FF0055" else "#2200F0FF"))
+                setStroke((1 * dp).toInt(), Color.parseColor(if (isExpanded) "#FF0055" else "#00F0FF"))
+                cornerRadius = 8 * dp
+            }
+            expandIcon.background = btnBg
+            expandIcon.setTextColor(Color.parseColor(if (isExpanded) "#FF5577" else "#00F0FF"))
+            try {
+                windowManager?.updateViewLayout(rootLayout, params)
+            } catch (_: Exception) {}
+        }
+
+        val collapseMenuBtn = createCyberCardButton(windowContext, "Tutup Menu", "Kembalikan ke Pill", "▲", "#00F0FF") {
+            toggleDockExpansion()
+        }
+        val exitOverlayBtn = createCyberCardButton(windowContext, "Matikan Dock", "Hentikan Layanan", "✕", "#FF3366") {
             stopSelf()
         }
-        buttonsRow5.addView(closeBtn)
-        dockPanel.addView(buttonsRow5)
+        bottomControlsRow.addView(collapseMenuBtn)
+        bottomControlsRow.addView(exitOverlayBtn)
+        dockPanel.addView(bottomControlsRow)
 
         rootLayout.addView(pillLayout)
         rootLayout.addView(dockPanel)
@@ -463,15 +624,6 @@ class FloatingFpsService : Service() {
         var initialTouchX = 0f
         var initialTouchY = 0f
         var isDragging = false
-
-        fun toggleDockExpansion() {
-            isExpanded = !isExpanded
-            dockPanel.visibility = if (isExpanded) View.VISIBLE else View.GONE
-            expandIcon.text = if (isExpanded) " ▲ TUTUP" else " ⚙ MENU"
-            try {
-                windowManager?.updateViewLayout(rootLayout, params)
-            } catch (_: Exception) {}
-        }
 
         pillLayout.setOnTouchListener { _, event ->
             when (event.action) {
@@ -594,26 +746,30 @@ class FloatingFpsService : Service() {
                 // Update HUD Text & Dynamic Color with true fluctuating decimals
                 fpsTextView.text = String.format(java.util.Locale.US, "%.1f FPS", currentFps)
                 val fpsRatio = currentFps / targetMaxFps
-                fpsTextView.setTextColor(
-                    when {
-                        fpsRatio >= 0.94f -> Color.parseColor("#00E676") // Hijau stabil
-                        fpsRatio >= 0.84f -> Color.parseColor("#00F0FF") // Cyan normal
-                        fpsRatio >= 0.70f -> Color.parseColor("#FFB800") // Kuning frame drop
-                        else -> Color.parseColor("#FF3366")              // Merah lag parah
-                    }
-                )
+                val fpsColor = when {
+                    fpsRatio >= 0.94f -> Color.parseColor("#00E676") // Hijau stabil
+                    fpsRatio >= 0.84f -> Color.parseColor("#00F0FF") // Cyan normal
+                    fpsRatio >= 0.70f -> Color.parseColor("#FFB800") // Kuning frame drop
+                    else -> Color.parseColor("#FF3366")              // Merah lag parah
+                }
+                fpsTextView.setTextColor(fpsColor)
+                fpsDot.setTextColor(fpsColor)
 
-                pingTextView.text = String.format(java.util.Locale.US, " • %dms", livePingMs)
-                pingTextView.setTextColor(
-                    if (livePingMs < 50) Color.parseColor("#00E676")
+                val pingColor = if (livePingMs < 50) Color.parseColor("#00E676")
                     else if (livePingMs < 100) Color.parseColor("#00F0FF")
                     else Color.parseColor("#FFB800")
-                )
+                pingTextView.text = String.format(java.util.Locale.US, " 📶 %dms", livePingMs)
+                pingTextView.setTextColor(pingColor)
 
-                infoTextView.text = String.format(java.util.Locale.US, " • %d%% RAM • %.0f°C", telemetry.usedRamPercent.toInt(), telemetry.batteryTempCelsius)
+                infoTextView.text = String.format(
+                    java.util.Locale.US,
+                    " • 🧠 %d%% • 🌡 %.0f°C",
+                    telemetry.usedRamPercent.toInt(),
+                    telemetry.batteryTempCelsius
+                )
                 dockStatsTextView.text = String.format(
                     java.util.Locale.US,
-                    "FPS: %.1f (Min: %.1f, Max: %.1f) • Jitter: %.1fms",
+                    "REAL: %.1f FPS • MIN: %.1f • MAX: %.1f • JITTER: %.1fms",
                     currentFps, minRecordedFps, maxRecordedFps, measuredJitterMs
                 )
 
@@ -687,6 +843,67 @@ class FloatingFpsService : Service() {
             }
             crosshairView = null
             Toast.makeText(this, "🎯 Crosshair Dinonaktifkan", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun createCyberCardButton(
+        uiContext: Context,
+        title: String,
+        subtitle: String,
+        icon: String,
+        accentColorHex: String,
+        onClick: (View) -> Unit
+    ): LinearLayout {
+        val dp = uiContext.resources.displayMetrics.density
+        val accentColor = Color.parseColor(accentColorHex)
+        return LinearLayout(uiContext).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((11 * dp).toInt(), (8 * dp).toInt(), (11 * dp).toInt(), (8 * dp).toInt())
+            val defaultBg = GradientDrawable().apply {
+                setColor(Color.parseColor("#141D2D"))
+                setStroke((1 * dp).toInt(), Color.parseColor("#22334A"))
+                cornerRadius = 12 * dp
+            }
+            background = defaultBg
+            isClickable = true
+            isFocusable = false
+
+            val titleRow = LinearLayout(uiContext).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val titleView = TextView(uiContext).apply {
+                text = "$icon $title"
+                setTextColor(accentColor)
+                textSize = 10.5f
+                typeface = Typeface.DEFAULT_BOLD
+            }
+            titleRow.addView(titleView)
+            addView(titleRow)
+
+            val subView = TextView(uiContext).apply {
+                text = subtitle
+                setTextColor(Color.parseColor("#7E93AE"))
+                textSize = 8.5f
+                setPadding(0, (2 * dp).toInt(), 0, 0)
+            }
+            addView(subView)
+
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins((3 * dp).toInt(), (3 * dp).toInt(), (3 * dp).toInt(), (3 * dp).toInt())
+            }
+
+            setOnClickListener { v ->
+                val pressBg = GradientDrawable().apply {
+                    setColor(Color.parseColor("#1F304B"))
+                    setStroke((1.5f * dp).toInt(), accentColor)
+                    cornerRadius = 12 * dp
+                }
+                background = pressBg
+                postDelayed({ background = defaultBg }, 160)
+                onClick(v)
+            }
         }
     }
 

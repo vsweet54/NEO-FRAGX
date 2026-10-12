@@ -111,10 +111,10 @@ fun InAppFloatingDock(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .shadow(12.dp, RoundedCornerShape(20.dp))
+                        .shadow(14.dp, RoundedCornerShape(20.dp))
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Color(0xF0080E18))
-                        .border(2.dp, NeonCyan, RoundedCornerShape(20.dp))
+                        .background(Color(0xF0080D18))
+                        .border(1.8.dp, NeonCyan, RoundedCornerShape(20.dp))
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
@@ -144,25 +144,32 @@ fun InAppFloatingDock(
                                 }
                             }
                         }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    // FPS Indicator
-                    Text(
-                        text = "60 FPS",
-                        color = StatusSuccess,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    // FPS Indicator Chip
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x2200E676))
+                            .border(1.dp, Color(0x6600E676), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "● ", color = StatusSuccess, fontSize = 9.sp)
+                            Text(
+                                text = "60 FPS",
+                                color = StatusSuccess,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
                     if (!isCompactMode) {
-                        Text(
-                            text = " • ",
-                            color = TextSecondary,
-                            fontSize = 11.sp
-                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         // Ping Indicator
                         Text(
-                            text = "${livePing}ms",
+                            text = "📶 ${livePing}ms",
                             color = if (livePing < 60) StatusSuccess else StatusWarning,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -170,29 +177,30 @@ fun InAppFloatingDock(
                         )
                         Text(
                             text = " • ",
-                            color = TextSecondary,
+                            color = Color(0xFF2A3F5E),
                             fontSize = 11.sp
                         )
                         // RAM & Temp
                         Text(
-                            text = "${telemetry.usedRamPercent.toInt()}% RAM",
+                            text = "🧠 ${telemetry.usedRamPercent.toInt()}% • 🌡 ${telemetry.batteryTempCelsius.toInt()}°C",
                             color = TextSecondary,
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isExpanded) Color(0x33FF0055) else Color(0x3300F0FF))
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isExpanded) Color(0x28FF0055) else Color(0x2800F0FF))
+                            .border(1.dp, if (isExpanded) Color(0xFFFF0055) else NeonCyan, RoundedCornerShape(8.dp))
                             .clickable { isExpanded = !isExpanded }
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = if (isExpanded) "▲ TUTUP" else "⚙ MENU",
                             color = if (isExpanded) Color(0xFFFF5577) else NeonCyan,
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
